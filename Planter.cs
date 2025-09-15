@@ -13,6 +13,7 @@ using VRage;
 using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
+using VRage.Game.ModAPI.Ingame;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
 using VRage.Utils;
@@ -33,9 +34,6 @@ namespace FarmerAutomation
             if (block == null)
                 return;
 
-            MyLog.Default.Log(MyLogSeverity.Info,
-                $"Found block {block?.CustomName} : {block?.Components.Contains(typeof(IMyFarmPlotLogic))}");
-
             foreach (var component in block.Components)
             {
                 _planterComponent = component as IMyFarmPlotLogic;
@@ -46,27 +44,32 @@ namespace FarmerAutomation
             if (_planterComponent == null)
                 return;
 
-            NeedsUpdate = MyEntityUpdateEnum.EACH_100TH_FRAME;
-
+            if (MyAPIGateway.Session.IsServer)
+            {
+                NeedsUpdate = MyEntityUpdateEnum.EACH_100TH_FRAME;
+            }
 
             _planterBlock = block;
-            MyLog.Default.Log(MyLogSeverity.Info, $"Found planter block {_planterComponent.IsPlantPlanted}");
+            MyLog.Default.Log(MyLogSeverity.Debug, $"FarmerAutomation: Found planter block {_planterComponent.IsPlantPlanted}");
         }
-        
+
         public override void UpdateBeforeSimulation100()
         {
             base.UpdateBeforeSimulation100();
 
+            if (!MyAPIGateway.Session.IsServer)
+                return;
+
             if (_planterComponent.IsPlantPlanted && _planterComponent.IsAlive)
                 return;
-            
+
             double halfScale = _planterBlock.CubeGrid.GridSizeEnum == MyCubeSize.Large ? 1.25 : 0.25;
 
             var localBox = new BoundingBoxD(
                 new Vector3D(-halfScale, -halfScale, -halfScale),
                 new Vector3D(halfScale, halfScale, halfScale)
             );
-            
+
             var matrix = _planterBlock.WorldMatrix;
             var obb = new MyOrientedBoundingBoxD(localBox, matrix);
             BoundingBoxD broadAabb = obb.GetAABB();
@@ -74,35 +77,65 @@ namespace FarmerAutomation
             var candidates = MyAPIGateway.Entities.GetEntitiesInAABB(ref broadAabb);
             var match = candidates.FirstOrDefault(e =>
             {
-                Vector3D pos = e.PositionComp?.GetPosition() ?? Vector3D.Zero;
-
                 var floating = e as MyFloatingObject;
-                if(floating == null || !obb.Contains(ref pos) || floating.IsPreview)
+                if (floating == null || floating.IsPreview || e.PositionComp == null || !(floating.Item.Content is MyObjectBuilder_SeedItem))
                     return false;
 
-                return floating.Item.Content is MyObjectBuilder_SeedItem && floating.Item.Amount >= _planterComponent.AmountOfSeedsRequired;
+                Vector3D pos = e.PositionComp.GetPosition();
+                if (!obb.Contains(ref pos))
+                    return false;
+
+                return floating.Item.Amount >= _planterComponent.AmountOfSeedsRequired;
             }) as MyFloatingObject;
-            
+
             if (match != null)
             {
-                
-                // HACK: Only the Player can plant, so i need to give the item to the player, and then call "PlantSeed()"
-                var player = MyAPIGateway.Session.Player;
-                if (player == null || !player.Character.HasInventory)
+                // HACK: Only the Player can plant, so i need to tell the Client to give the item to the player inv, and then call "PlantSeed()"
+                foreach (var player in FarmerAutomationMod.Instance.players)
                 {
-                    MyAPIGateway.Utilities.ShowNotification("Player not found!");
-                    return;
+                    if (player == null || !player.Character.HasInventory || player.IsBot)
+                        continue;
+                    if (player.Character.Parent != null) // skip players in cockpits, PlantSeed() fails on them
+                        continue;
+                    if (Vector3D.DistanceSquared(player.GetPosition(), _planterBlock.GetPosition()) > FarmerAutomationMod.Instance.maxDistanceSquared)
+                        continue;
+
+                    var inventory = player.Character.GetInventory();
+                    if (!inventory.CanAddItemAmount(match.Item, _planterComponent.AmountOfSeedsRequired))
+                        continue;
+
+                    FarmerAutomationMod.network.TransmitToPlayer(new PacketPlayerPlantSeed()
+                    {
+                        BlockId = _planterBlock.EntityId,
+                        FloatingId = match.EntityId,
+                    }, player.SteamUserId, true);
+                    break;
                 }
+            }
+        }
 
-                match.Item.Amount -= _planterComponent.AmountOfSeedsRequired;
+        public void PlantFloatingSeedInFarmPlot(MyFloatingObject floating)
+        {
+            if (floating == null)
+                return;
 
-                var playerInventory = MyAPIGateway.Session.Player.Character.GetInventory(0);
-                playerInventory.AddItems(_planterComponent.AmountOfSeedsRequired, match.Item.Content);
-                var items = playerInventory.GetItems();
-                var inv = items.Last();
-                _planterComponent.PlantSeed(inv); 
-                
-                match.UpdateInternalState();
+            var playerInventory = MyAPIGateway.Session.Player.Character.GetInventory(0);
+            if (playerInventory.CanAddItemAmount(floating.Item, _planterComponent.AmountOfSeedsRequired))
+            {
+                playerInventory.AddItems(_planterComponent.AmountOfSeedsRequired, floating.Item.Content);
+                floating.Item.Amount -= _planterComponent.AmountOfSeedsRequired;
+                floating.UpdateInternalState();
+
+                var invItem = playerInventory.FindItem(floating.Item.GetDefinitionId());
+                if (invItem != null)
+                {
+                    _planterComponent.PlantSeed(invItem);
+                    /* MyFarmPlotLogic.PlantSeed_Server */
+                }
+                else
+                {
+                    MyLog.Default.Log(MyLogSeverity.Error, $"FarmerAutomation: Failed to find inventory item after adding it");
+                }
             }
         }
     }
