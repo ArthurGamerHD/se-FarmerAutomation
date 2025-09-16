@@ -1,28 +1,40 @@
-﻿using ProtoBuf;
+using ProtoBuf;
+using VRage.Game;
 using VRage.Game.ModAPI;
 using VRageMath;
 
 namespace FarmerAutomation
 {
-    [ProtoContract]
-    class PacketPlayerPlantSeed : MyEasyNetworkManager.IPacket
-    {
-        [ProtoMember(1)]
-        public long BlockId { get; set; }
-        [ProtoMember(2)]
-        public long FloatingId { get; set; }
+	[ProtoContract]
+	class PacketPlayerPlantSeed : MyEasyNetworkManager.IPacket
+	{
+		[ProtoMember(1)]
+		public long BlockId { get; set; }
+		[ProtoMember(2)]
+		private string _ItemDefinitionId { get; set; }
+		public MyDefinitionId ItemDefinitionId
+		{
+			get
+			{
+				return MyDefinitionId.Parse(_ItemDefinitionId);
+			}
+			set
+			{
+				_ItemDefinitionId = value.ToString();
+			}
+		}
 
-        public PacketPlayerPlantSeed() { }
+		public PacketPlayerPlantSeed() { }
 
-        public PacketPlayerPlantSeed(long blockId, long floatingId)
-        {
-            this.BlockId = blockId;
-            this.FloatingId = floatingId;
-        }
+		public PacketPlayerPlantSeed(long blockId, MyDefinitionId itemDefinitionId)
+		{
+			this.BlockId = blockId;
+			this.ItemDefinitionId = itemDefinitionId;
+		}
 
-        public int GetId()
-        {
-            return 1;
-        }
-    }
+		public int GetId()
+		{
+			return 1;
+		}
+	}
 }

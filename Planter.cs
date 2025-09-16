@@ -104,38 +104,39 @@ namespace FarmerAutomation
                     if (!inventory.CanAddItemAmount(match.Item, _planterComponent.AmountOfSeedsRequired))
                         continue;
 
-                    FarmerAutomationMod.network.TransmitToPlayer(new PacketPlayerPlantSeed()
+                    inventory.AddItems(_planterComponent.AmountOfSeedsRequired, match.Item.Content);
+                    match.Item.Amount -= _planterComponent.AmountOfSeedsRequired;
+                    match.UpdateInternalState();
+
+                    var invItem = inventory.FindItem(match.Item.GetDefinitionId());
+                    if (invItem != null)
                     {
-                        BlockId = _planterBlock.EntityId,
-                        FloatingId = match.EntityId,
-                    }, player.SteamUserId, true);
-                    break;
+                        FarmerAutomationMod.network.TransmitToPlayer(new PacketPlayerPlantSeed()
+                        {
+                            BlockId = _planterBlock.EntityId,
+                            ItemDefinitionId = invItem.GetDefinitionId(),
+                        }, player.SteamUserId, true);
+                        break;
+                    }
                 }
             }
         }
 
-        public void PlantFloatingSeedInFarmPlot(MyFloatingObject floating)
+        public void PlantInventorySeedInFarmPlot(MyDefinitionId itemDefinitionId)
         {
-            if (floating == null)
+            if (itemDefinitionId == null)
                 return;
 
             var playerInventory = MyAPIGateway.Session.Player.Character.GetInventory(0);
-            if (playerInventory.CanAddItemAmount(floating.Item, _planterComponent.AmountOfSeedsRequired))
+            var invItem = playerInventory.FindItem(itemDefinitionId);
+            if (invItem != null)
             {
-                playerInventory.AddItems(_planterComponent.AmountOfSeedsRequired, floating.Item.Content);
-                floating.Item.Amount -= _planterComponent.AmountOfSeedsRequired;
-                floating.UpdateInternalState();
-
-                var invItem = playerInventory.FindItem(floating.Item.GetDefinitionId());
-                if (invItem != null)
-                {
-                    _planterComponent.PlantSeed(invItem);
-                    /* MyFarmPlotLogic.PlantSeed_Server */
-                }
-                else
-                {
-                    MyLog.Default.Log(MyLogSeverity.Error, $"FarmerAutomation: Failed to find inventory item after adding it");
-                }
+                _planterComponent.PlantSeed(invItem);
+                /* MyFarmPlotLogic.PlantSeed_Server */
+            }
+            else
+            {
+                MyLog.Default.Log(MyLogSeverity.Error, $"FarmerAutomation: Failed to find inventory item after adding it");
             }
         }
     }

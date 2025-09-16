@@ -39,7 +39,7 @@ namespace FarmerAutomation
             {
                 var packet = packetRaw.UnWrap<PacketPlayerPlantSeed>();
                 var block = MyEntities.GetEntityById(packet.BlockId) as IMyFunctionalBlock;
-                var floating = MyEntities.GetEntityById(packet.FloatingId) as MyFloatingObject;
+                var itemDefinitionId = packet.ItemDefinitionId;
 
                 Planter planter = null;
 
@@ -53,13 +53,13 @@ namespace FarmerAutomation
                     }
                 }
 
-                if (planter == null || floating == null)
+                if (planter == null || itemDefinitionId == null)
                 {
-                    MyLog.Default.Log(MyLogSeverity.Warning, $"FarmerAutomation: Client received plant seed packet with {(block != null ? "" : "NULL Block ")}{(floating != null ? "" : "NULL Floating ")}{(planter != null ? "" : "NULL Planter component")}");
+                    MyLog.Default.Log(MyLogSeverity.Warning, $"FarmerAutomation: Client received plant seed packet with {(block != null ? "" : "NULL Block ")}{(itemDefinitionId != null ? "" : "NULL itemDefinitionId ")}{(planter != null ? "" : "NULL Planter component")}");
                     return;
                 }
 
-                planter.PlantFloatingSeedInFarmPlot(floating);
+                planter.PlantInventorySeedInFarmPlot(itemDefinitionId);
             }
         }
 
