@@ -51,11 +51,22 @@ namespace FarmerAutomation
             button.Title = MyStringId.GetOrCompute("ToolTipTerminalInventory_ThrowOut");
             button.Tooltip = MyStringId.GetOrCompute("ToolTipTerminalInventory_ThrowOut");
             button.SupportsMultipleBlocks = true;
-            button.Enabled = b => b.HasInventory && !b.GetInventory(0).Empty();
+            button.Enabled = CanDrop;
 
             button.Action = ThrowOutSingleItem;
 
             MyAPIGateway.TerminalControls.AddControl<IMyShipConnector>(button);
+        }
+
+        static bool CanDrop(IMyTerminalBlock b)
+        {
+            var connector = b as IMyShipConnector;
+            return connector != null && CanDrop(connector);
+        }
+
+        static bool CanDrop(IMyShipConnector connector)
+        {
+            return connector.HasInventory && !connector.GetInventory(0).Empty() && !((connector.Status != MyShipConnectorStatus.Unconnected || !connector.IsFunctional || connector.Closed));
         }
 
         static void BuildActions()
@@ -70,12 +81,22 @@ namespace FarmerAutomation
                 a.Icon = @"Textures\GUI\Icons\Actions\Start.dds";
 
                 a.Action = ThrowOutSingleItem;
+
+
                 
                 a.Writer = (b, sb) =>
                 {
-                    sb.Append(b.GetInventory(0).Empty()
-                        ? MyTexts.GetString("BlockPropertyProperties_WaterLevel_Empty")
-                        : MyTexts.GetString("ScreenMedicals_RespawnShipReady"));
+                    var connector = b as IMyShipConnector;
+                    string status = connector == null
+                        ? MyTexts.GetString("DetectedEntity_Unknown") // Connector status is Unknown
+                        : b.GetInventory(0).Empty()
+                            ? MyTexts.GetString("BlockPropertyProperties_WaterLevel_Empty") // Inventory is Empty
+                            : (connector.Status != MyShipConnectorStatus.Unconnected)
+                                ? MyTexts.GetString("EventState_ConnectorConnected") // Is Connected or Ready to Connect
+                                : MyTexts.GetString("ScreenMedicals_RespawnShipReady"); // Is Ready to Drop Items
+
+                    
+                    sb.Append(status);
                 };
 
                 a.Enabled = b => true;

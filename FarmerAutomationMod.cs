@@ -61,8 +61,7 @@ namespace FarmerAutomation
 
                 if (planter == null || itemDefinitionId == null)
                 {
-                    MyLog.Default.Log(MyLogSeverity.Warning,
-                        $"FarmerAutomation: Client received plant seed packet with {(block != null ? "" : "NULL Block ")}{(itemDefinitionId != null ? "" : "NULL itemDefinitionId ")}{(planter != null ? "" : "NULL Planter component")}");
+                    MyLog.Default.Log(MyLogSeverity.Warning,$"FarmerAutomation: Client received plant seed packet with {(block != null ? "" : "NULL Block ")}{(itemDefinitionId != null ? "" : "NULL itemDefinitionId ")}{(planter != null ? "" : "NULL Planter component")}");
                     return;
                 }
 
