@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Sandbox.Game;
 using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
@@ -19,6 +20,8 @@ namespace FarmerAutomation
         private int nextUpdate = 0;
         public int maxDistanceSquared = 2000 * 2000;
         public List<IMyPlayer> players = new List<IMyPlayer>();
+
+        public readonly List<PlantRequest> PendingRequests = new List<PlantRequest>();
 
         public override void LoadData()
         {
@@ -40,26 +43,42 @@ namespace FarmerAutomation
                 var packet = packetRaw.UnWrap<PacketPlayerPlantSeed>();
                 var block = MyEntities.GetEntityById(packet.BlockId) as IMyFunctionalBlock;
                 var itemDefinitionId = packet.ItemDefinitionId;
-
+                
                 Planter planter = null;
 
-                foreach (var component in block?.Components)
+                if(block != null)
                 {
-                    var planeterComponent = component as Planter;
-                    if (planeterComponent != null)
+                    foreach (var component in block?.Components)
                     {
-                        planter = planeterComponent;
-                        break;
+                        var planterComponent = component as Planter;
+                        if (planterComponent != null)
+                        {
+                            planter = planterComponent;
+                            break;
+                        }
                     }
                 }
 
                 if (planter == null || itemDefinitionId == null)
                 {
-                    MyLog.Default.Log(MyLogSeverity.Warning, $"FarmerAutomation: Client received plant seed packet with {(block != null ? "" : "NULL Block ")}{(itemDefinitionId != null ? "" : "NULL itemDefinitionId ")}{(planter != null ? "" : "NULL Planter component")}");
+                    MyLog.Default.Log(MyLogSeverity.Warning,
+                        $"FarmerAutomation: Client received plant seed packet with {(block != null ? "" : "NULL Block ")}{(itemDefinitionId != null ? "" : "NULL itemDefinitionId ")}{(planter != null ? "" : "NULL Planter component")}");
                     return;
                 }
 
-                planter.PlantInventorySeedInFarmPlot(itemDefinitionId);
+                var request = new PlantRequest(itemDefinitionId.Value, planter);
+                PendingRequests.Add(request);
+            }
+
+            if (packetRaw.PacketId == 2)
+            {
+                var packet = packetRaw.UnWrap<PacketConnectorDropSeed>();
+                var block = MyEntities.GetEntityById(packet.BlockId) as IMyShipConnector;
+
+                if (block != null)
+                {
+                    ConnectorLogicComponent.ThrowOutSingleItem(block);
+                }
             }
         }
 
@@ -82,20 +101,67 @@ namespace FarmerAutomation
 
         public override void UpdateAfterSimulation()
         {
+            if (nextUpdate % 10 == 0 && PendingRequests.Any())
+                HandlePlantRequest();
+
             nextUpdate--;
             if (nextUpdate-- > 0)
                 return;
             nextUpdate = 600; // every 600 frames, about 10 seconds
 
             players.Clear();
-            MyAPIGateway.Players.GetPlayers(players, (p) => !p.IsBot && p.Character != null && p.Character.HasInventory);
+            MyAPIGateway.Players.GetPlayers(players,
+                (p) => !p.IsBot && p.Character != null && p.Character.HasInventory);
 
             var syncDistance = MyAPIGateway.Session.SessionSettings.SyncDistance - 100;
             maxDistanceSquared = syncDistance * syncDistance;
         }
 
+        private void HandlePlantRequest()
+        {
+            for (var index = 0; index < PendingRequests.Count;)
+            {
+                var current = PendingRequests[index];
+
+                if (current.CurrentTry > PlantRequest.MAX_RETRY)
+                {
+                    PendingRequests.RemoveAtFast(index);
+                    MyLog.Default.Log(MyLogSeverity.Error,$"FarmerAutomation: Max retries exceeded {PlantRequest.MAX_RETRY}");
+                    continue;
+                }
+
+                if (!current.Planter.TryPlantInventorySeedInFarmPlot(current.DefinitionId))
+                {
+                    MyLog.Default.Log(MyLogSeverity.Debug,"FarmerAutomation: ({0}x) Failed to find inventory item after adding it", current.CurrentTry);
+                }
+
+                if (!current.Planter.CanPlant())
+                {
+                    PendingRequests.RemoveAtFast(index);
+                    continue;
+                }
+
+                current.CurrentTry++;
+                index++;
+            }
+        }
+
         public override void Draw()
         {
+        }
+    }
+
+    public class PlantRequest
+    {
+        public const int MAX_RETRY = 10;
+        public int CurrentTry;
+        public MyDefinitionId DefinitionId;
+        public Planter Planter;
+
+        public PlantRequest(MyDefinitionId definitionId, Planter planter)
+        {
+            DefinitionId = definitionId;
+            Planter = planter;
         }
     }
 }

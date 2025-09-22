@@ -12,11 +12,15 @@ namespace FarmerAutomation
 		public long BlockId { get; set; }
 		[ProtoMember(2)]
 		private string _ItemDefinitionId { get; set; }
-		public MyDefinitionId ItemDefinitionId
+		public MyDefinitionId? ItemDefinitionId
 		{
 			get
 			{
-				return MyDefinitionId.Parse(_ItemDefinitionId);
+				MyDefinitionId def;
+				if (MyDefinitionId.TryParse(_ItemDefinitionId, out def))
+					return def;
+
+				return null;
 			}
 			set
 			{

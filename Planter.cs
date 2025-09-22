@@ -53,6 +53,11 @@ namespace FarmerAutomation
             MyLog.Default.Log(MyLogSeverity.Debug, $"FarmerAutomation: Found planter block {_planterComponent.IsPlantPlanted}");
         }
 
+        public bool CanPlant()
+        {
+            return !_planterComponent.IsAlive || !_planterComponent.IsPlantPlanted;
+        }
+
         public override void UpdateBeforeSimulation100()
         {
             base.UpdateBeforeSimulation100();
@@ -60,7 +65,7 @@ namespace FarmerAutomation
             if (!MyAPIGateway.Session.IsServer)
                 return;
 
-            if (_planterComponent.IsPlantPlanted && _planterComponent.IsAlive)
+            if (!CanPlant())
                 return;
 
             double halfScale = _planterBlock.CubeGrid.GridSizeEnum == MyCubeSize.Large ? 1.25 : 0.25;
@@ -122,22 +127,20 @@ namespace FarmerAutomation
             }
         }
 
-        public void PlantInventorySeedInFarmPlot(MyDefinitionId itemDefinitionId)
+        public bool TryPlantInventorySeedInFarmPlot(MyDefinitionId itemDefinitionId)
         {
-            if (itemDefinitionId == null)
-                return;
-
             var playerInventory = MyAPIGateway.Session.Player.Character.GetInventory(0);
             var invItem = playerInventory.FindItem(itemDefinitionId);
-            if (invItem != null)
-            {
-                _planterComponent.PlantSeed(invItem);
-                /* MyFarmPlotLogic.PlantSeed_Server */
-            }
-            else
-            {
-                MyLog.Default.Log(MyLogSeverity.Error, $"FarmerAutomation: Failed to find inventory item after adding it");
-            }
+            if (invItem == null) 
+                return false;
+
+            // Not 100% guaranteed that the server will plant from this request but
+            // there's no way to know until the server reply with the new status of the Planter
+            _planterComponent.PlantSeed(invItem); 
+            
+            /* MyFarmPlotLogic.PlantSeed_Server */
+
+            return true;
         }
     }
 }

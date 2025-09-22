@@ -14,6 +14,7 @@ using VRage.ModAPI;
 using VRage.ObjectBuilders;
 using VRage.Utils;
 using VRageMath;
+using MyShipConnectorStatus = Sandbox.ModAPI.Ingame.MyShipConnectorStatus;
 
 
 namespace FarmerAutomation
@@ -87,6 +88,15 @@ namespace FarmerAutomation
 
         public static void ThrowOutSingleItem(IMyShipConnector connector)
         {
+            if(connector.Status != MyShipConnectorStatus.Unconnected || !connector.IsFunctional || connector.Closed)
+                return;
+            
+            if (!MyAPIGateway.Utilities.IsDedicated && !MyAPIGateway.Session.IsServer)
+            {
+                FarmerAutomationMod.network.TransmitToServer(new PacketConnectorDropSeed(connector.EntityId), false);
+                return;
+            }
+            
             var inventory = connector.GetInventory(0);
             var items = new List<MyInventoryItem>();
             inventory.GetItems(items);
