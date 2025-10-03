@@ -69,7 +69,7 @@ namespace FarmerAutomation
         static bool CanDrop(IMyShipConnector connector)
         {
             return connector.HasInventory && !connector.GetInventory(0).Empty() &&
-                   !((connector.Status != MyShipConnectorStatus.Unconnected || !connector.IsFunctional ||
+                   !((connector.Status != MyShipConnectorStatus.Unconnected || !connector.Enabled || !connector.IsFunctional ||
                       connector.Closed));
         }
 
