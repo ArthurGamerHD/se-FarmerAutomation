@@ -1,0 +1,9 @@
+C:\Users\Arthur\RiderProjects\se-FarmerAutomation\SE-Farm-Automation\bin\x64\Debug\netframework48\thumb.png
+C:\Users\Arthur\RiderProjects\se-FarmerAutomation\SE-Farm-Automation\bin\x64\Debug\netframework48\SE-Farm-Automation.dll
+C:\Users\Arthur\RiderProjects\se-FarmerAutomation\SE-Farm-Automation\bin\x64\Debug\netframework48\SE-Farm-Automation.pdb
+C:\Users\Arthur\RiderProjects\se-FarmerAutomation\SE-Farm-Automation\obj\x64\Debug\netframework48\SE-Farm-Automation.csproj.AssemblyReference.cache
+C:\Users\Arthur\RiderProjects\se-FarmerAutomation\SE-Farm-Automation\obj\x64\Debug\netframework48\SE-Farm-Automation.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Arthur\RiderProjects\se-FarmerAutomation\SE-Farm-Automation\obj\x64\Debug\netframework48\SE-Farm-Automation.csproj.CoreCompileInputs.cache
+C:\Users\Arthur\RiderProjects\se-FarmerAutomation\SE-Farm-Automation\obj\x64\Debug\netframework48\SE-Farm-Automation.sourcelink.json
+C:\Users\Arthur\RiderProjects\se-FarmerAutomation\SE-Farm-Automation\obj\x64\Debug\netframework48\SE-Farm-Automation.dll
+C:\Users\Arthur\RiderProjects\se-FarmerAutomation\SE-Farm-Automation\obj\x64\Debug\netframework48\SE-Farm-Automation.pdb
