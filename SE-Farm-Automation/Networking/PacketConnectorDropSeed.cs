@@ -19,7 +19,7 @@ namespace FarmerAutomation
 
 		public int GetId()
 		{
-			return 2;
+			return 1;
 		}
 	}
 }

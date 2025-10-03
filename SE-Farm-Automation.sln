@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SE-Farm-Automation", "SE-Farm-Automation\SE-Farm-Automation.csproj", "{181B931D-84A2-477C-A252-D26B255F57ED}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SE-Easy-Farm", "SE-Easy-Farm\SE-Easy-Farm.csproj", "{75FB846A-D68E-4EFB-8BBF-47EBF642E45C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{181B931D-84A2-477C-A252-D26B255F57ED}.Debug|x64.ActiveCfg = Debug|x64
+		{181B931D-84A2-477C-A252-D26B255F57ED}.Debug|x64.Build.0 = Debug|x64
+		{181B931D-84A2-477C-A252-D26B255F57ED}.Release|x64.ActiveCfg = Release|x64
+		{181B931D-84A2-477C-A252-D26B255F57ED}.Release|x64.Build.0 = Release|x64
+		{75FB846A-D68E-4EFB-8BBF-47EBF642E45C}.Debug|x64.ActiveCfg = Debug|x64
+		{75FB846A-D68E-4EFB-8BBF-47EBF642E45C}.Debug|x64.Build.0 = Debug|x64
+		{75FB846A-D68E-4EFB-8BBF-47EBF642E45C}.Release|x64.ActiveCfg = Release|x64
+		{75FB846A-D68E-4EFB-8BBF-47EBF642E45C}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+EndGlobal

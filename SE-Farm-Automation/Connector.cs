@@ -81,8 +81,6 @@ namespace FarmerAutomation
                 a.Icon = @"Textures\GUI\Icons\Actions\Start.dds";
 
                 a.Action = ThrowOutSingleItem;
-
-
                 
                 a.Writer = (b, sb) =>
                 {
@@ -114,7 +112,7 @@ namespace FarmerAutomation
             
             if (!MyAPIGateway.Utilities.IsDedicated && !MyAPIGateway.Session.IsServer)
             {
-                FarmerAutomationMod.network.TransmitToServer(new PacketConnectorDropSeed(connector.EntityId), false);
+                FarmerAutomationMod.Network.TransmitToServer(new PacketConnectorDropSeed(connector.EntityId), false);
                 return;
             }
             

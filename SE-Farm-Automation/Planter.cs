@@ -83,7 +83,7 @@ namespace FarmerAutomation
             var match = candidates.FirstOrDefault(e =>
             {
                 var floating = e as MyFloatingObject;
-                if (floating == null || floating.IsPreview || e.PositionComp == null || !(floating.Item.Content is MyObjectBuilder_SeedItem))
+                if (!(floating?.Item.Content is MyObjectBuilder_SeedItem) || floating.IsPreview || e.PositionComp == null)
                     return false;
 
                 Vector3D pos = e.PositionComp.GetPosition();
@@ -93,54 +93,12 @@ namespace FarmerAutomation
                 return floating.Item.Amount >= _planterComponent.AmountOfSeedsRequired;
             }) as MyFloatingObject;
 
-            if (match != null)
-            {
-                // HACK: Only the Player can plant, so i need to tell the Client to give the item to the player inv, and then call "PlantSeed()"
-                foreach (var player in FarmerAutomationMod.Instance.players)
-                {
-                    if (player == null || !player.Character.HasInventory || player.IsBot)
-                        continue;
-                    if (player.Character.Parent != null) // skip players in cockpits, PlantSeed() fails on them
-                        continue;
-                    if (Vector3D.DistanceSquared(player.GetPosition(), _planterBlock.GetPosition()) > FarmerAutomationMod.Instance.maxDistanceSquared)
-                        continue;
+            if (match == null) 
+                return;
 
-                    var inventory = player.Character.GetInventory();
-                    if (!inventory.CanAddItemAmount(match.Item, _planterComponent.AmountOfSeedsRequired))
-                        continue;
-
-                    inventory.AddItems(_planterComponent.AmountOfSeedsRequired, match.Item.Content);
-                    match.Item.Amount -= _planterComponent.AmountOfSeedsRequired;
-                    match.UpdateInternalState();
-
-                    var invItem = inventory.FindItem(match.Item.GetDefinitionId());
-                    if (invItem != null)
-                    {
-                        FarmerAutomationMod.network.TransmitToPlayer(new PacketPlayerPlantSeed()
-                        {
-                            BlockId = _planterBlock.EntityId,
-                            ItemDefinitionId = invItem.GetDefinitionId(),
-                        }, player.SteamUserId, true);
-                        break;
-                    }
-                }
-            }
-        }
-
-        public bool TryPlantInventorySeedInFarmPlot(MyDefinitionId itemDefinitionId)
-        {
-            var playerInventory = MyAPIGateway.Session.Player.Character.GetInventory(0);
-            var invItem = playerInventory.FindItem(itemDefinitionId);
-            if (invItem == null) 
-                return false;
-
-            // Not 100% guaranteed that the server will plant from this request but
-            // there's no way to know until the server reply with the new status of the Planter
-            _planterComponent.PlantSeed(invItem); 
-            
-            /* MyFarmPlotLogic.PlantSeed_Server */
-
-            return true;
+            match.Item.Amount -= _planterComponent.AmountOfSeedsRequired;
+            _planterComponent.PlantSeed(match.Item.GetDefinitionId());
+            match.UpdateInternalState();
         }
     }
 }
