@@ -95,13 +95,17 @@ namespace FarmerAutomation
 
             if (match != null)
             {
-                // HACK: Only the Player can plant, so i need to tell the Client to give the item to the player inv, and then call "PlantSeed()"
+                // HACK: Only the Player can plant, so I need to give the item to the player inv, and then tell the Client to call "PlantSeed()"
                 foreach (var player in FarmerAutomationMod.Instance.players)
                 {
                     if (player == null || !player.Character.HasInventory || player.IsBot)
                         continue;
-                    if (player.Character.Parent != null) // skip players in cockpits, PlantSeed() fails on them
+
+                    // skip players not controlling they character (cockpit, rc, turrets, replay tool, etc),
+                    // PlantSeed() fails on them
+                    if(player.Controller.ControlledEntity != player.Character) 
                         continue;
+
                     if (Vector3D.DistanceSquared(player.GetPosition(), _planterBlock.GetPosition()) > FarmerAutomationMod.Instance.maxDistanceSquared)
                         continue;
 
