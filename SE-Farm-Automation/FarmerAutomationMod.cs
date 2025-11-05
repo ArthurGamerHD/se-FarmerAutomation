@@ -15,6 +15,20 @@ namespace FarmerAutomation
     [MySessionComponentDescriptor(MyUpdateOrder.NoUpdate)]
     public class FarmerAutomationMod : MySessionComponentBase
     {
+        static bool _drawDebug;
+
+        public static bool DrawDebug
+        {
+            get { return _drawDebug; }
+            set
+            {
+                _drawDebug = value;
+                DrawDebugChanged?.Invoke();
+            }
+        }
+
+        public static event Action DrawDebugChanged;
+        
         public static FarmerAutomationMod Instance;
         public static MyEasyNetworkManager network = new MyEasyNetworkManager(32161);
         private int nextUpdate = 0;
@@ -26,8 +40,22 @@ namespace FarmerAutomation
         public override void LoadData()
         {
             Instance = this;
-
+            MyAPIGateway.Utilities.MessageEntered += OnMessageEntered;
             SetUpdateOrder(MyUpdateOrder.AfterSimulation);
+        }
+
+        void OnMessageEntered(string text, ref bool others)
+        {
+            if (text.StartsWith("!pa")) others = false;
+
+            if (text.StartsWith("!padebug"))
+            {
+                DrawDebug = !DrawDebug;
+                MyAPIGateway.Utilities.ShowMessage(nameof(FarmerAutomation), $"Draw debug {(DrawDebug ? "Enabled" : "Disabled")}");
+                return;
+            }
+
+            MyAPIGateway.Utilities.ShowMessage(nameof(FarmerAutomation), "Unknown command, try !padebug");
         }
 
         public override void BeforeStart()
@@ -43,10 +71,10 @@ namespace FarmerAutomation
                 var packet = packetRaw.UnWrap<PacketPlayerPlantSeed>();
                 var block = MyEntities.GetEntityById(packet.BlockId) as IMyFunctionalBlock;
                 var itemDefinitionId = packet.ItemDefinitionId;
-                
+
                 Planter planter = null;
 
-                if(block != null)
+                if (block != null)
                 {
                     foreach (var component in block?.Components)
                     {
@@ -61,7 +89,8 @@ namespace FarmerAutomation
 
                 if (planter == null || itemDefinitionId == null)
                 {
-                    MyLog.Default.Log(MyLogSeverity.Warning,$"FarmerAutomation: Client received plant seed packet with {(block != null ? "" : "NULL Block ")}{(itemDefinitionId != null ? "" : "NULL itemDefinitionId ")}{(planter != null ? "" : "NULL Planter component")}");
+                    MyLog.Default.Log(MyLogSeverity.Warning,
+                        $"{nameof(FarmerAutomation)}: Client received plant seed packet with {(block != null ? "" : "NULL Block ")}{(itemDefinitionId != null ? "" : "NULL itemDefinitionId ")}{(planter != null ? "" : "NULL Planter component")}");
                     return;
                 }
 
@@ -87,6 +116,8 @@ namespace FarmerAutomation
             {
                 network?.UnRegister();
                 network = null;
+                MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
+                DrawDebugChanged = null;
             }
             catch (Exception e)
             {
@@ -125,13 +156,15 @@ namespace FarmerAutomation
                 if (current.CurrentTry > PlantRequest.MAX_RETRY)
                 {
                     PendingRequests.RemoveAtFast(index);
-                    MyLog.Default.Log(MyLogSeverity.Error,$"FarmerAutomation: Max retries exceeded {PlantRequest.MAX_RETRY}");
+                    MyLog.Default.Log(MyLogSeverity.Error,
+                        $"{nameof(FarmerAutomation)}: Max retries exceeded {PlantRequest.MAX_RETRY}");
                     continue;
                 }
 
                 if (!current.Planter.TryPlantInventorySeedInFarmPlot(current.DefinitionId))
                 {
-                    MyLog.Default.Log(MyLogSeverity.Debug,"FarmerAutomation: ({0}x) Failed to find inventory item after adding it", current.CurrentTry);
+                    MyLog.Default.Log(MyLogSeverity.Debug,
+                        $"{nameof(FarmerAutomation)}: ({0}x) Failed to find inventory item after adding it", current.CurrentTry);
                 }
 
                 if (!current.Planter.CanPlant())
