@@ -46,7 +46,10 @@ namespace FarmerAutomation
 
         void OnMessageEntered(string text, ref bool others)
         {
-            if (text.StartsWith("!pa")) others = false;
+            if (text.StartsWith("!pa"))
+                others = false;
+            else
+                return;
 
             if (text.StartsWith("!padebug"))
             {
