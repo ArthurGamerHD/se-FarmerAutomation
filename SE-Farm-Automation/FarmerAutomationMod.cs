@@ -15,14 +15,46 @@ namespace FarmerAutomation
     [MySessionComponentDescriptor(MyUpdateOrder.NoUpdate)]
     public class FarmerAutomationMod : MySessionComponentBase
     {
+        static bool _drawDebug;
+
+        public static bool DrawDebug
+        {
+            get { return _drawDebug; }
+            set
+            {
+                _drawDebug = value;
+                DrawDebugChanged?.Invoke();
+            }
+        }
+
+        public static event Action DrawDebugChanged;
+        
         public static FarmerAutomationMod Instance;
         public static MyEasyNetworkManager Network = new MyEasyNetworkManager(32161);
 
         public override void LoadData()
         {
             Instance = this;
+            MyAPIGateway.Utilities.MessageEntered += OnMessageEntered;
         }
 
+        void OnMessageEntered(string text, ref bool others)
+        {
+            if (text.StartsWith("!pa"))
+                others = false;
+            else
+                return;
+
+            if (text.StartsWith("!padebug"))
+            {
+                DrawDebug = !DrawDebug;
+                MyAPIGateway.Utilities.ShowMessage(nameof(FarmerAutomation), $"Draw debug {(DrawDebug ? "Enabled" : "Disabled")}");
+                return;
+            }
+
+            MyAPIGateway.Utilities.ShowMessage(nameof(FarmerAutomation), "Unknown command, try !padebug");
+        }
+        
         public override void BeforeStart()
         {
             Network.Register();
@@ -47,6 +79,7 @@ namespace FarmerAutomation
         {
             try
             {
+                MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
                 Network?.UnRegister();
                 Network = null;
             }
