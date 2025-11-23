@@ -1,16 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using Sandbox.Common.ObjectBuilders;
-using Sandbox.Game;
 using Sandbox.Game.Entities;
-using Sandbox.Game.Entities.Blocks;
 using Sandbox.ModAPI;
 using SE_Farm_Automation.Extensions;
-using SpaceEngineers.Game.EntityComponents.GameLogic;
-using SpaceEngineers.Game.ModAPI;
-using VRage;
 using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
@@ -19,22 +11,40 @@ using VRage.ModAPI;
 using VRage.ObjectBuilders;
 using VRage.Utils;
 using VRageMath;
+using Task = ParallelTasks.Task;
 
 namespace FarmerAutomation
 {
     [MyEntityComponentDescriptor(typeof(MyObjectBuilder_FunctionalBlock), useEntityUpdate: true)]
     public class Planter : MyGameLogicComponent
     {
-        static readonly BoundingBoxD EmptyBb = new BoundingBoxD();
-        static readonly Dictionary<string, BoundingBoxD> BoundingBoxCache = new Dictionary<string, BoundingBoxD>();
-        static Color _debugColor = new Color(255, 255, 255, 128);
-
         const string DETECTOR_NAME = "detector_farmplot_001";
-        
+        const float TRIM_DISTANCE_SQUARED = 2.5f * 2.5f; // seeds more distant to this gets ignored
+        const float SLEEP_DISTANCE_SQUARED = 3000f * 3000f; // if there's no seed in this area, block starts to sleep
+
+        Task? _backgroundTask;
+
+        MyFloatingObject _match;
+
+        static readonly Dictionary<string, BoundingBoxD> LocalBoundingBoxCache = new Dictionary<string, BoundingBoxD>();
+
+        static Color _debugPlantedColor = new Color(0, 255, 255, 128),
+            _debugReadColor = new Color(0, 255, 0, 128),
+            _debugSleepColor = new Color(255, 0, 0, 128);
+
+        bool IsSleeping { get; set; }
+
+        static object _lock = new object();
+
         IMyFunctionalBlock _planterBlock;
         IMyFarmPlotLogic _planterComponent;
-        
-        BoundingBoxD _detectionArea = EmptyBb;
+
+        MyOrientedBoundingBoxD _obb;
+        BoundingBoxD _detectionArea;
+        bool _shouldSleep, _hasModelLoaded;
+
+        Vector3D _pos;
+        double _distance;
 
         public override void Init(MyObjectBuilder_EntityBase objectBuilder)
         {
@@ -56,18 +66,26 @@ namespace FarmerAutomation
             FarmerAutomationMod.DrawDebugChanged += ApplyNeedsUpdate;
             ApplyNeedsUpdate();
 
-            _planterBlock = block;
-            MyLog.Default.Log(MyLogSeverity.Debug,
-                $"{nameof(FarmerAutomation)}: Found planter block {_planterComponent.IsPlantPlanted}");
+            FarmerAutomationMod.OnFloatingSeedAdded += SeedAdded;
 
-            _detectionArea = GetDetectionBoxForBlock(_planterBlock); 
-            // May fail if the model is not yet loaded, UpdateItemDetector() will try again if the detectionArea is empty
+            _planterBlock = block;
+
+            MyLog.Default.Log(MyLogSeverity.Debug,
+                $"{nameof(FarmerAutomation)}: Found planter block - Planted = {_planterComponent.IsPlantPlanted}");
+
+            TryGetBoundingBox(); // will fail if the model is not yet loaded, but then it will try again later
         }
+
+        void SeedAdded(Vector3D pos) => IsSleeping = IsSleeping &&
+                                                     Vector3D.DistanceSquared(pos,
+                                                         _planterBlock.WorldMatrix.Translation) >
+                                                     SLEEP_DISTANCE_SQUARED;
 
         public override void Close()
         {
             base.Close();
             FarmerAutomationMod.DrawDebugChanged -= ApplyNeedsUpdate;
+            FarmerAutomationMod.OnFloatingSeedAdded -= SeedAdded;
             NeedsUpdate = MyEntityUpdateEnum.NONE;
         }
 
@@ -75,117 +93,147 @@ namespace FarmerAutomation
         {
             var flag = MyEntityUpdateEnum.NONE;
 
-            if (FarmerAutomationMod.DrawDebug && !(MyAPIGateway.Session.IsServer && MyAPIGateway.Utilities.IsDedicated))
+            if (FarmerAutomationMod.DrawDebug && !SessionUtil.IsDedicatedServer)
                 flag |= MyEntityUpdateEnum.EACH_FRAME;
-            if (MyAPIGateway.Session.IsServer)
+            if (SessionUtil.IsServer)
                 flag |= MyEntityUpdateEnum.EACH_100TH_FRAME;
 
             NeedsUpdate = flag;
-        }
-
-        public bool CanPlant()
-        {
-            return !_planterComponent.IsAlive || !_planterComponent.IsPlantPlanted;
         }
 
         public override void UpdateAfterSimulation()
         {
             base.UpdateAfterSimulation();
             var matrix = _planterBlock.WorldMatrix;
-            MySimpleObjectDraw.DrawTransparentBox(ref matrix, ref _detectionArea, ref _debugColor,
+
+            if (!_hasModelLoaded && !TryGetBoundingBox())
+                return;
+
+            var color = _planterComponent.IsPlantPlanted ? _debugPlantedColor :
+                IsSleeping ? _debugSleepColor : _debugReadColor;
+
+            MySimpleObjectDraw.DrawTransparentBox(ref matrix, ref _detectionArea, ref color,
                 MySimpleObjectRasterizer.Solid, 1);
         }
 
         public override void UpdateBeforeSimulation100()
         {
             base.UpdateBeforeSimulation100();
-            UpdateItemDetector();
-        }
 
-        public void UpdateItemDetector()
-        {
-            if (!CanPlant())
-                return;
-
-            if (!MyAPIGateway.Session.IsServer)
+            if (_match != null)
             {
-                MyLog.Default.Log(MyLogSeverity.Warning,
-                    $"{nameof(FarmerAutomation)}: Item detection should be handled on server side");
+                PlantSeed();
                 return;
             }
 
-            if (_detectionArea == EmptyBb)
-                _detectionArea = GetDetectionBoxForBlock(_planterBlock);
-
-            var matrix = _planterBlock.WorldMatrix;
-            var obb = new MyOrientedBoundingBoxD(_detectionArea, matrix);
-            BoundingBoxD broadAabb = obb.GetAABB();
-
-            var candidates = MyAPIGateway.Entities.GetEntitiesInAABB(ref broadAabb);
-            var match = candidates.FirstOrDefault(e =>
-            {
-                var floating = e as MyFloatingObject;
-                if (!(floating?.Item.Content is MyObjectBuilder_SeedItem) || floating.IsPreview ||
-                    e.PositionComp == null)
-                    return false;
-
-                Vector3D pos = e.PositionComp.GetPosition();
-                if (!obb.Contains(ref pos))
-                    return false;
-
-                return floating.Item.Amount >= _planterComponent.AmountOfSeedsRequired;
-            }) as MyFloatingObject;
-
-            if (match == null)
+            if (IsSleeping || (_backgroundTask != null && !_backgroundTask.Value.IsComplete))
                 return;
 
-            _planterComponent.RemovePlant(false);
-            _planterComponent.PlantSeed(match.Item.GetDefinitionId());
-            match.Item.Amount -= _planterComponent.AmountOfSeedsRequired;
-            match.UpdateInternalState();
+            _backgroundTask = MyAPIGateway.Parallel.StartBackground(UpdateItemDetector);
         }
 
-        static public BoundingBoxD GetDetectionBoxForBlock(IMyTerminalBlock planterBlock)
+        void UpdateItemDetector()
         {
-            BoundingBoxD localBox;
+            if (!SessionUtil.IsServer)
+            {
+                MyLog.Default.Log(MyLogSeverity.Warning,
+                    $"{nameof(FarmerAutomation)}: Item detection should be handled on server side");
+                ApplyNeedsUpdate();
+                return;
+            }
 
-            if (BoundingBoxCache.TryGetValue(planterBlock.BlockDefinition.ToString(), out localBox))
-                return localBox;
+            if (!CanPlant(_planterComponent))
+                return;
 
-            if (planterBlock.Model == null)
-                return EmptyBb;
+            if (!_hasModelLoaded && !TryGetBoundingBox())
+                return;
+
+            _obb = new MyOrientedBoundingBoxD(_detectionArea, _planterBlock.WorldMatrix);
+
+            _shouldSleep = true;
+            _match = null;
+
+            foreach (var seed in FarmerAutomationMod.FloatingSeeds)
+            {
+                if (_match != null || seed.IsPreview)
+                    continue;
+
+                _pos = seed.PositionComp.GetPosition();
+                _distance = Vector3D.DistanceSquared(_pos, _planterBlock.WorldMatrix.Translation);
+
+                if (_shouldSleep && _distance < SLEEP_DISTANCE_SQUARED)
+                    _shouldSleep = false;
+
+                if (_distance > TRIM_DISTANCE_SQUARED || !_obb.Contains(ref _pos))
+                    continue;
+
+                if (seed.Item.Amount < _planterComponent.AmountOfSeedsRequired)
+                    continue;
+
+                _match = seed;
+            }
+
+            IsSleeping = _shouldSleep;
+        }
+
+        public void PlantSeed()
+        {
+            _planterComponent.RemovePlant(false);
+            _planterComponent.PlantSeed(_match.Item.GetDefinitionId());
+            _match.Item.Amount -= _planterComponent.AmountOfSeedsRequired;
+            _match.UpdateInternalState();
+            _match = null;
+        }
+
+        bool TryGetBoundingBox()
+        {
+            if (_planterBlock.Model == null) // plant-blocks serialized on world load will not have this data;
+                return false;
+
+            _hasModelLoaded = true;
+
+            lock (_lock) // this can be called from multiple threads but the LocalBoundingBoxCache is Static and Shared
+                GetDetectionBoxForBlock(_planterBlock, out _detectionArea);
+
+            return true;
+        }
+
+        static void GetDetectionBoxForBlock(IMyTerminalBlock planterBlock, out BoundingBoxD localBox)
+        {
+            if (LocalBoundingBoxCache.TryGetValue(planterBlock.BlockDefinition.ToString(), out localBox))
+                return;
 
             IDictionary<string, IMyModelDummy> dummies = new Dictionary<string, IMyModelDummy>();
-
             planterBlock.Model?.GetDummies(dummies);
-            
-            IMyModelDummy detector;
             double halfScale = planterBlock.CubeGrid.GridSize * .5f;
 
-            if (!dummies.TryGetValue(DETECTOR_NAME, out detector))
-                return new BoundingBoxD(
+            IMyModelDummy detector;
+            if (dummies.TryGetValue(DETECTOR_NAME, out detector))
+            {
+                var referenceMatrix = detector.Matrix;
+                localBox = CreateDetectionArea(referenceMatrix, halfScale);
+            }
+            else
+            {
+                localBox = new BoundingBoxD(
                     new Vector3D(-halfScale, -halfScale, -halfScale),
                     new Vector3D(halfScale, halfScale, halfScale)
                 );
+            }
 
-            var referenceMatrix = detector.Matrix;
-            localBox = CreateDetectionArea(referenceMatrix, halfScale);
-
-            BoundingBoxCache[planterBlock.BlockDefinition.ToString()] = localBox;
-            return localBox;
-
+            LocalBoundingBoxCache[planterBlock.BlockDefinition.ToString()] = localBox;
         }
 
-        public static BoundingBoxD CreateDetectionArea(MatrixD referenceMatrix, double height)
+        static BoundingBoxD CreateDetectionArea(MatrixD referenceMatrix, double height)
         {
-            // Extract absolute scale for each axis, so we can define which axis is "forward"
-            // on this specific 3d model based on the one with smallest lenght
+            // Extract absolute scale for each axis, so we can define which axis is "forward" on this specific 3d model
+            // based on the one with smallest lenght
             double currentSize,
                 x = Math.Abs(referenceMatrix.Scale.X),
                 y = Math.Abs(referenceMatrix.Scale.Y),
                 z = Math.Abs(referenceMatrix.Scale.Z),
                 min = MathHelper.Min(x, MathHelper.Min(y, z));
-            
+
             const double TOLERANCE = 1e-4;
             MatrixD matrix = referenceMatrix;
             Vector3D axisDir;
@@ -218,8 +266,10 @@ namespace FarmerAutomation
             var offsetAmount = (height - currentSize) * 0.45;
             var offset = axisDir.Normalized() * offsetAmount;
             finalMatrix.Translation += offset;
-            
+
             return finalMatrix.ToBoundingBox();
         }
+
+        static bool CanPlant(IMyFarmPlotLogic comp) => !comp.IsAlive || !comp.IsPlantPlanted;
     }
 }
