@@ -11,9 +11,13 @@ using VRage.ModAPI;
 using VRage.ObjectBuilders;
 using VRage.Utils;
 using VRageMath;
+using IMyInventoryItem = VRage.Game.ModAPI.IMyInventoryItem;
 
 namespace FarmerAutomation
 {
+    /// <summary>
+    /// This version is *DEAD* as update 1.208 (Core System Update, 24/11/2025)
+    /// </summary>
     [MyEntityComponentDescriptor(typeof(MyObjectBuilder_FunctionalBlock), useEntityUpdate: true)]
     public class Planter : MyGameLogicComponent
     {
@@ -181,9 +185,13 @@ namespace FarmerAutomation
 
             // Not 100% guaranteed that the server will plant from this request but
             // there's no way to know until the server reply with the new status of the Planter
-            _planterComponent.PlantSeed(invItem);
-
-            /* MyFarmPlotLogic.PlantSeed_Server */
+            
+            // _planterComponent.PlantSeed(invItem); // We Dead...
+            MyAPIGateway.Utilities.ShowMessage(
+                "Planting Automation",
+                "ERROR: We found a seed, but cannot locate the API method 'PlantSeed(IMyInventoryItem seed)'!\n" +
+                "Switch to \"Planting Automation 2\" which utilizes the new API!"
+            );
 
             return true;
         }

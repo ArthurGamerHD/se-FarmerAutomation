@@ -9,9 +9,13 @@ using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRage.Utils;
+using VRageMath;
 
 namespace FarmerAutomation
 {
+    /// <summary>
+    /// This version is *DEAD* as update 1.208 (Core System Update, 24/11/2025)
+    /// </summary>
     [MySessionComponentDescriptor(MyUpdateOrder.NoUpdate)]
     public class FarmerAutomationMod : MySessionComponentBase
     {
@@ -28,7 +32,7 @@ namespace FarmerAutomation
         }
 
         public static event Action DrawDebugChanged;
-        
+
         public static FarmerAutomationMod Instance;
         public static MyEasyNetworkManager network = new MyEasyNetworkManager(32161);
         private int nextUpdate = 0;
@@ -54,7 +58,8 @@ namespace FarmerAutomation
             if (text.StartsWith("!padebug"))
             {
                 DrawDebug = !DrawDebug;
-                MyAPIGateway.Utilities.ShowMessage(nameof(FarmerAutomation), $"Draw debug {(DrawDebug ? "Enabled" : "Disabled")}");
+                MyAPIGateway.Utilities.ShowMessage(nameof(FarmerAutomation),
+                    $"Draw debug {(DrawDebug ? "Enabled" : "Disabled")}");
                 return;
             }
 
@@ -65,6 +70,19 @@ namespace FarmerAutomation
         {
             network.Register();
             network.OnReceivedPacket += OnPacketReceived;
+
+            base.BeforeStart();
+            try
+            {
+                MyVisualScriptLogicProvider.SendChatMessageColored("The Farm plot API got completely replaced on Core Systems Update (1.208)." +
+                                                                   "Switch to \"Planting Automation 2\" now if you want to continue using its features." +
+                                                                   "The new version was built from scratch using the new server-side API!",
+                    Color.Red, "Planting Automation is *DEAD* as of 1.208");
+            }
+            catch (Exception e)
+            {
+                MyLog.Default.Log(MyLogSeverity.Error, $"{nameof(FarmerAutomation)}: {e}");
+            }
         }
 
         public void OnPacketReceived(MyEasyNetworkManager.PacketIn packetRaw)
@@ -167,7 +185,8 @@ namespace FarmerAutomation
                 if (!current.Planter.TryPlantInventorySeedInFarmPlot(current.DefinitionId))
                 {
                     MyLog.Default.Log(MyLogSeverity.Debug,
-                        $"{nameof(FarmerAutomation)}: ({0}x) Failed to find inventory item after adding it", current.CurrentTry);
+                        $"{nameof(FarmerAutomation)}: ({0}x) Failed to find inventory item after adding it",
+                        current.CurrentTry);
                 }
 
                 if (!current.Planter.CanPlant())
@@ -188,7 +207,7 @@ namespace FarmerAutomation
 
     public class PlantRequest
     {
-        public const int MAX_RETRY = 10;
+        public const int MAX_RETRY = 1; //10; changed to 1, since the mod is broken 
         public int CurrentTry;
         public MyDefinitionId DefinitionId;
         public Planter Planter;
