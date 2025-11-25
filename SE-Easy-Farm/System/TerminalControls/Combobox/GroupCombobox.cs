@@ -1,14 +1,18 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using EasyFarming.Helpers;
 using EasyFarming.System.Config;
 using Sandbox.ModAPI;
 using Sandbox.ModAPI.Interfaces.Terminal;
 using VRage.Game;
 using VRage.Game.ModAPI;
+using VRage.Game.ModAPI.Ingame;
 using VRage.ModAPI;
 using VRage.Utils;
 using IMyBlockGroup = Sandbox.ModAPI.Ingame.IMyBlockGroup;
+using IMyCubeGrid = VRage.Game.ModAPI.IMyCubeGrid;
 
 
 namespace EasyFarming.System.TerminalControls.Combobox
@@ -17,7 +21,11 @@ namespace EasyFarming.System.TerminalControls.Combobox
     {
         readonly List<IMyCubeGrid> _grids = new List<IMyCubeGrid>();
         readonly List<IMyBlockGroup> _groups = new List<IMyBlockGroup>();
+        
+        Dictionary<string, bool> _inventoryTypeCache = new Dictionary<string, bool>();
 
+        protected string[] AllowedTypes { get; set; }
+        
         public override IMyTerminalControl TerminalControl => _terminalControl;
         IMyTerminalControl _terminalControl;
 
@@ -45,19 +53,21 @@ namespace EasyFarming.System.TerminalControls.Combobox
 
             if (!string.IsNullOrEmpty(group))
             {
+                SelectedCache = group;
+
                 long id;
                 if (ComboBoxItemHelper.TryGetGroupId($"*{group}*", out id))
                     return id;
-
+                
                 return -1;
             }
 
-            if (block != null)
-            {
-                return block.Value;
-            }
+            if (block == null)
+                return -1;
 
-            return -1;
+            SelectedCache = block.Value;
+            return (long)SelectedCache;
+
         }
 
         protected virtual void Content(List<MyTerminalControlComboBoxItem> blockList)
@@ -72,32 +82,110 @@ namespace EasyFarming.System.TerminalControls.Combobox
 
             var referenceGrid = ReferenceBlock.CubeGrid;
 
-            MyAPIGateway.TerminalActionsHelper.GetTerminalSystemForGrid(ReferenceBlock.CubeGrid).GetBlockGroups(_groups);
-            blockList.AddRange(_groups.Select(a => ComboBoxItemHelper.GetOrComputeComboBoxItem($"*{a.Name}*", -1L)));
+            MyAPIGateway.TerminalActionsHelper.GetTerminalSystemForGrid(ReferenceBlock.CubeGrid)
+                .GetBlockGroups(_groups);
+            
+            
+            var filter = "";
+
+            if (SearchTextbox != null)
+                filter = SearchTextbox.TextBuilder.ToString();
+            
+            blockList.AddRange(_groups.Where(group => string.IsNullOrEmpty(filter) || group.Name.Equals(SelectedCache) || filter.Split(' ').All(a =>
+                                                          group.Name.Split(' ').Any(b => b.StartsWith(a, StringComparison.InvariantCultureIgnoreCase))))
+                .Select(a => ComboBoxItemHelper.GetOrComputeComboBoxItem($"*{a.Name}*", -1L)));
 
             MyAPIGateway.GridGroups.GetGroup(referenceGrid, GridLinkTypeEnum.Logical, _grids);
-            
-            blockList.AddRange(referenceGrid.GetFatBlocks<IMyTerminalBlock>().Where(c => IsValidBlock(c, ReferenceBlock)).Select(a => ComboBoxItemHelper.GetOrComputeComboBoxItem(
-                a.DisplayNameText, a.EntityId)));
+
+            blockList.AddRange(referenceGrid.GetFatBlocks<IMyTerminalBlock>()
+                .Where(c => IsValidBlock(c, ReferenceBlock, filter)).Select(a =>
+                    ComboBoxItemHelper.GetOrComputeComboBoxItem(
+                        a.DisplayNameText, a.EntityId)));
 
             foreach (var grid in _grids)
             {
                 if (grid == ReferenceBlock.CubeGrid)
                     continue;
 
-                blockList.AddRange(referenceGrid.GetFatBlocks<IMyTerminalBlock>().Where(c => IsValidBlock(c, ReferenceBlock)).Select(a => ComboBoxItemHelper.GetOrComputeComboBoxItem(
-                    $"@{a.DisplayNameText}@",
-                    a.EntityId)));
-                
+                blockList.AddRange(referenceGrid.GetFatBlocks<IMyTerminalBlock>()
+                    .Where(c => IsValidBlock(c, ReferenceBlock, filter)).Select(a =>
+                        ComboBoxItemHelper.GetOrComputeComboBoxItem(
+                            $"@{a.DisplayNameText}@",
+                            a.EntityId)));
             }
+
+            blockList.Sort((a, b) => string.Compare(a.Value.String, b.Value.String, StringComparison.Ordinal));
         }
 
-        bool IsValidBlock(IMyTerminalBlock block, IMyTerminalBlock referenceBlock)
+        bool IsValidBlock(IMyTerminalBlock block, IMyTerminalBlock referenceBlock, string filter = "")
         {
-            return block != null && // Check if is a Terminal block
-                   block.HasInventory && // Checking block that have inventory
-                   block.GetUserRelationToOwner(referenceBlock.OwnerId) <=
-                   MyRelationsBetweenPlayerAndBlock.FactionShare;
+            if(block == null || !block.HasInventory)
+                return false; // Check if is a Terminal block
+            
+            if(block.EntityId.Equals(SelectedCache))
+                return true;
+            
+            
+            if(!(block.GetUserRelationToOwner(referenceBlock.OwnerId) <=
+                    MyRelationsBetweenPlayerAndBlock.FactionShare &&
+                    (string.IsNullOrEmpty(filter) || block.CustomName == null ||
+                     filter.Split(' ').All(a =>
+                         block.CustomName.Split(' ').Any(b => b.StartsWith(a, StringComparison.InvariantCultureIgnoreCase))))))
+               return false;
+            
+            // I May or may not spend way too much time on this and my craziness level is increasing steadily,
+            // but for some random Klang forsaken reason, Blocks other than Assemblers is NOT returning Seeds/Plants
+            // on its inventory whitelist, I will just hardcode to ignore this 
+            if(block is IMyShipConnector || block is IMyCargoContainer || block is IMyConveyorSorter)
+                return true;
+            if(!(block is IMyAssembler))
+                return false;
+            
+            var def = block.BlockDefinition.ToString();
+            bool allowed;
+            
+            if (_inventoryTypeCache.TryGetValue(def, out allowed))
+                return allowed;
+            
+            List<MyItemType> types = new List<MyItemType>();
+
+            for (var i = 0; i < block.InventoryCount; i++)
+            {
+               var inv = block.GetInventory(i);
+               inv.GetAcceptedItems(types);
+
+               StringBuilder sb = new StringBuilder();
+
+               sb.Append(def);
+               sb.AppendLine( $" inventory index: {i}");
+               
+               foreach (var type in types)
+               {
+                   sb.AppendLine($"{type.TypeId} : {type.ToString()}");
+               }
+               
+               allowed = types.Any(a => AllowedTypes.Any(b => a.TypeId.EndsWith(b)));
+               types.Clear();
+               
+               sb.AppendLine();
+               sb.Append($"Searching For: ");
+               
+               foreach (var type in AllowedTypes)
+               {
+                   sb.Append($"{type}, ");
+               }
+               
+               sb.AppendLine($"");
+               sb.AppendLine($"Found: {allowed}");
+               
+               MyLog.Default.Log(MyLogSeverity.Debug, sb.ToString());
+               
+               if(allowed)
+                   break;
+            }
+            
+            _inventoryTypeCache[def] = allowed;
+            return allowed;
         }
 
         protected virtual void Setter(IMyTerminalBlock b, long l)
@@ -109,9 +197,15 @@ namespace EasyFarming.System.TerminalControls.Combobox
 
             string group;
             if (ComboBoxItemHelper.TryGetGroupName(l, out group))
+            {
+                SelectedCache = group;
                 SetConfig(config, null, group.Substring(1, group.Length - 2));
+            }
             else
+            {
+                SelectedCache = l;
                 SetConfig(config, l, null);
+            }
 
             ConfigManager.Sync(b, config);
         }

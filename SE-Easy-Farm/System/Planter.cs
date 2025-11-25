@@ -147,7 +147,7 @@ namespace EasyFarming.System
             if (AirVent == null || Assembler == null)
             {
                 builder.AppendWarning(
-                    $"{MyTexts.GetString("AIBlocks_HudMessage_Error")} - {MyTexts.GetString("MissingBlock")}:", "");
+                    $"{MyTexts.GetString("MessageBox_Caption_NotFullyGrownWarning")} - {MyTexts.GetString("MissingBlock")}", "");
 
                 if (Assembler == null)
                     builder.AppendLine($"   {MyTexts.GetString("DisplayName_Block_FoodProcessor")}");

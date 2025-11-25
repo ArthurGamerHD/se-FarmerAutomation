@@ -6,8 +6,11 @@ namespace EasyFarming.System.TerminalControls.Combobox
 {
     public sealed class ComboBoxBlockInput : GroupCombobox
     {
+        readonly string[] _allowed = {"SeedItem"};
+        
         public ComboBoxBlockInput()
         {
+            AllowedTypes = _allowed;
             var strings = MyTexts.GetString("DisplayName_BlockGroup_InputOutputGroup").Split('/');
             var text = strings.Length == 2 ? MyStringId.GetOrCompute(strings[0]) : MyStringId.NullOrEmpty;
             CreateCombobox("InputBlocks", text);

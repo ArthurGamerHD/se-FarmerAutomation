@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using EasyFarming.Helpers;
@@ -16,7 +17,7 @@ namespace EasyFarming.System.TerminalControls.Combobox
 {
     public sealed class ComboBoxAssembler : ComboboxWrapper
     {
-        static Dictionary<string, bool> AssemblersAllowsSeeds = new Dictionary<string, bool>();
+        static readonly Dictionary<string, bool> AssemblersAllowsSeeds = new Dictionary<string, bool>();
 
         readonly List<IMyCubeGrid> _grids = new List<IMyCubeGrid>();
 
@@ -44,7 +45,11 @@ namespace EasyFarming.System.TerminalControls.Combobox
 
             block = settings.Assembler;
             if (block != null)
+            {
+                SelectedCache = block.Value;
                 return block.Value;
+            }
+               
 
             return -1;
         }
@@ -65,8 +70,12 @@ namespace EasyFarming.System.TerminalControls.Combobox
 
             MyAPIGateway.GridGroups.GetGroup(referenceGrid, GridLinkTypeEnum.Logical, _grids);
 
+            var filter = "";
+            if (SearchTextbox != null)
+                filter = SearchTextbox.TextBuilder.ToString();
+
             blockList.AddRange(referenceGrid.GetFatBlocks<IMyAssembler>()
-                .Where(c => IsValidBlock(c, ReferenceBlock))
+                .Where(c => IsValidBlock(c, ReferenceBlock, filter))
                 .Select(a => ComboBoxItemHelper.GetOrComputeComboBoxItem(
                     a.DisplayNameText, a.EntityId)));
 
@@ -75,18 +84,24 @@ namespace EasyFarming.System.TerminalControls.Combobox
                 if (grid == ReferenceBlock.CubeGrid)
                     continue;
 
-                blockList.AddRange(grid.GetFatBlocks<IMyAssembler>().Where(c => IsValidBlock(c, ReferenceBlock))
+                blockList.AddRange(grid.GetFatBlocks<IMyAssembler>().Where(c => IsValidBlock(c, ReferenceBlock, filter))
                     .Select(a => ComboBoxItemHelper.GetOrComputeComboBoxItem(
                         $"@{a.DisplayNameText}@",
                         a.EntityId)));
             }
         }
 
-        static bool IsValidBlock(IMyAssembler block, IMyTerminalBlock referenceBlock)
+        bool IsValidBlock(IMyAssembler block, IMyTerminalBlock referenceBlock, string filter = "")
         {
-            return block.GetUserRelationToOwner(referenceBlock.OwnerId) <=
-                   MyRelationsBetweenPlayerAndBlock.FactionShare
-                   && CanUseBlueprintFast(block);
+            return block != null &&
+                   (block.GetUserRelationToOwner(referenceBlock.OwnerId) <=
+                    MyRelationsBetweenPlayerAndBlock.FactionShare &&
+                    CanUseBlueprintFast(block) &&
+                    (string.IsNullOrEmpty(filter) || block.CustomName == null ||
+                     filter.Split(' ').All(a =>
+                         block.CustomName.Split(' ')
+                             .Any(b => b.StartsWith(a, StringComparison.InvariantCultureIgnoreCase))))
+                    || block.EntityId.Equals(SelectedCache));
         }
 
         static bool CanUseBlueprintFast(IMyAssembler block)
@@ -109,6 +124,7 @@ namespace EasyFarming.System.TerminalControls.Combobox
                 return;
 
             config.Assembler = l;
+            SelectedCache = l;
 
             ConfigManager.Sync(b, config);
             ConfigManager.GetInstanceForBlock(b).UpdateAssembler();

@@ -62,14 +62,18 @@ namespace EasyFarming.System
             Controls.Add(new SwitchToggleAuto());
                 
             Controls.Add(new Label("DisplayName_BlockGroup_InputOutputGroup"));
-            Controls.Add(new ComboBoxBlockInput());
-            Controls.Add(new ComboBoxBlockOutput());
+            var search = new SearchTextbox();
+            Controls.Add(search);
+            Controls.Add(new ComboBoxBlockInput {SearchTextbox = search});
+            Controls.Add(new ComboBoxBlockOutput {SearchTextbox = search});
             Controls.Add(new ListboxAllowedItems());
             Controls.Add(new Separator());
 
             Controls.Add(new Label("DisplayName_BlockGroup_AutomationGroup"));
-            Controls.Add(new ComboBoxAssembler());
-            Controls.Add(new ComboBoxAirSensor());
+            search = new SearchTextbox();
+            Controls.Add(search);
+            Controls.Add(new ComboBoxAssembler {SearchTextbox = search});
+            Controls.Add(new ComboBoxAirSensor {SearchTextbox = search});
             Controls.Add(new Separator());
                 
             MyLog.Default.Log(MyLogSeverity.Info,

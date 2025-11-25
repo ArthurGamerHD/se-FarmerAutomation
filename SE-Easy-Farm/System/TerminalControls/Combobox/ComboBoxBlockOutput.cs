@@ -6,8 +6,11 @@ namespace EasyFarming.System.TerminalControls.Combobox
 {
     public sealed class ComboBoxBlockOutput : GroupCombobox
     {
+        readonly string[] _allowed = {"PhysicalObject", "ConsumableItem"};
+
         public ComboBoxBlockOutput()
         {
+            AllowedTypes = _allowed;
             var strings = MyTexts.GetString("DisplayName_BlockGroup_InputOutputGroup").Split('/');
             var text = strings.Length == 2 ? MyStringId.GetOrCompute(strings[1]) : MyStringId.NullOrEmpty;
             CreateCombobox("OutputBlock", text);

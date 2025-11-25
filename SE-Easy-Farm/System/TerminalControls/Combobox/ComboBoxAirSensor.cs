@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using EasyFarming.Helpers;
@@ -33,17 +34,14 @@ namespace EasyFarming.System.TerminalControls.Combobox
 
             if (settings == null)
                 return -1;
-
-            string group;
+            
             long? block;
 
             block = settings.AirSensor;
-            if (block != null)
-            {
-                return block.Value;
-            }
+            if (block == null) return -1;
+            SelectedCache = block.Value;
+            return block.Value;
 
-            return -1;
         }
 
         void Content(List<MyTerminalControlComboBoxItem> blockList)
@@ -51,15 +49,26 @@ namespace EasyFarming.System.TerminalControls.Combobox
             if (ReferenceBlock == null)
                 return;
 
+            var filter = "";
+
+            if (SearchTextbox != null)
+                filter = SearchTextbox.TextBuilder.ToString();
+            
             blockList.AddRange(
                 ReferenceBlock.CubeGrid.GetFatBlocks<IMyAirVent>()
-                .Where(c => IsValidBlock(c, ReferenceBlock))
+                .Where(c => IsValidBlock(c, ReferenceBlock, filter))
                 .Select(a => ComboBoxItemHelper.GetOrComputeComboBoxItem(a.DisplayNameText, a.EntityId)));
         }
 
-        bool IsValidBlock(IMyTerminalBlock block, IMyTerminalBlock referenceBlock)
+        bool IsValidBlock(IMyTerminalBlock block, IMyTerminalBlock referenceBlock, string filter = "")
         {
-            return block.GetUserRelationToOwner(referenceBlock.OwnerId) <= MyRelationsBetweenPlayerAndBlock.FactionShare;
+            return block != null &&
+                    (block.GetUserRelationToOwner(referenceBlock.OwnerId) <=
+                    MyRelationsBetweenPlayerAndBlock.FactionShare &&
+                    (string.IsNullOrEmpty(filter) || block.CustomName == null ||
+                     filter.Split(' ').All(a =>
+                         block.CustomName.Split(' ').Any(b => b.StartsWith(a, StringComparison.InvariantCultureIgnoreCase))))
+                    || block.EntityId.Equals(SelectedCache));
         }
 
         void Setter(IMyTerminalBlock b, long l)
@@ -70,6 +79,7 @@ namespace EasyFarming.System.TerminalControls.Combobox
                 return;
             
             config.AirSensor = l;
+            SelectedCache = l;
 
             ConfigManager.Sync(b, config);
             ConfigManager.GetInstanceForBlock(b).UpdateAirVent();
