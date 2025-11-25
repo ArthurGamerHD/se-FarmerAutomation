@@ -107,7 +107,7 @@ namespace EasyFarming.System.TerminalControls.Combobox
                 if (grid == ReferenceBlock.CubeGrid)
                     continue;
 
-                blockList.AddRange(referenceGrid.GetFatBlocks<IMyTerminalBlock>()
+                blockList.AddRange(grid.GetFatBlocks<IMyTerminalBlock>()
                     .Where(c => IsValidBlock(c, ReferenceBlock, filter)).Select(a =>
                         ComboBoxItemHelper.GetOrComputeComboBoxItem(
                             $"@{a.DisplayNameText}@",
