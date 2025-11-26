@@ -75,7 +75,10 @@ namespace EasyFarming.System
                     foreach (var blueprintDefinition in seedBlueprints)
                     {
                         var seed = blueprintDefinition.Results.First(b => b.Id.TypeId.ToString().EndsWith("_SeedItem"));
-                        SeedsBlueprints.Add(seed.Id, blueprintDefinition);
+                        if(SeedsBlueprints.ContainsKey(seed.Id))
+                            MyLog.Default.Log(MyLogSeverity.Error, $"{nameof(EasyFarming)}: Blueprint for item \'{seed.Id}\' already exists! Multiples blueprints for the same item is NOT supported, Last one will be used");
+                        
+                        SeedsBlueprints[seed.Id] = blueprintDefinition;
                     }
                 }
                 
