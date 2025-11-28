@@ -15,7 +15,6 @@ using VRage.Game.ModAPI.Ingame;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
 using VRage.Utils;
-using VRageMath;
 using IMyInventory = VRage.Game.ModAPI.IMyInventory;
 
 namespace EasyFarming.System
@@ -26,6 +25,7 @@ namespace EasyFarming.System
         public static Dictionary<MyDefinitionId, MyBlueprintDefinitionBase> SeedsBlueprints;
 
         public static readonly List<Planter> Instances = new List<Planter>();
+        public static readonly List<string> KnownPlanterBlocks = new List<string>();
 
         public FarmPlotConfig Config;
 
@@ -34,6 +34,7 @@ namespace EasyFarming.System
         public IMyAssembler Assembler;
         IMyFarmPlotLogic _planterComponent;
         IMyResourceStorageComponent _storageComponent;
+        static bool _actionsInitialized;
 
         public override void Init(MyObjectBuilder_EntityBase objectBuilder)
         {
@@ -58,12 +59,15 @@ namespace EasyFarming.System
             Instances.Add(this);
             Block = block;
 
+            if (!IsKnownPlanterBlock(block))
+                KnownPlanterBlocks.Add(Block.BlockDefinition.ToString());
+
             ConfigManager.LoadSettings(Block, ref Config);
-            
+
             if (MyAPIGateway.Session.IsServer)
             {
                 NeedsUpdate = MyEntityUpdateEnum.EACH_100TH_FRAME;
-                
+
                 if (SeedsBlueprints == null)
                 {
                     SeedsBlueprints = new Dictionary<MyDefinitionId, MyBlueprintDefinitionBase>();
@@ -75,14 +79,15 @@ namespace EasyFarming.System
                     foreach (var blueprintDefinition in seedBlueprints)
                     {
                         var seed = blueprintDefinition.Results.First(b => b.Id.TypeId.ToString().EndsWith("_SeedItem"));
-                        if(SeedsBlueprints.ContainsKey(seed.Id))
-                            MyLog.Default.Log(MyLogSeverity.Error, $"{nameof(EasyFarming)}: Blueprint for item \'{seed.Id}\' already exists! Multiples blueprints for the same item is NOT supported, Last one will be used");
-                        
+                        if (SeedsBlueprints.ContainsKey(seed.Id))
+                            MyLog.Default.Log(MyLogSeverity.Error,
+                                $"{nameof(EasyFarming)}: Blueprint for item \'{seed.Id}\' already exists! Multiples blueprints for the same item is NOT supported, Last one will be used");
+
                         SeedsBlueprints[seed.Id] = blueprintDefinition;
                     }
                 }
-                
-                
+
+
                 MyLog.Default.Log(MyLogSeverity.Debug, $"{nameof(EasyFarming)}: Found planter block");
             }
             else
@@ -94,16 +99,97 @@ namespace EasyFarming.System
             Block.AppendingCustomInfo += OnBlockOnAppendingCustomInfo;
         }
 
+        static bool IsKnownPlanterBlock(IMyTerminalBlock b) => KnownPlanterBlocks.Contains(b.BlockDefinition.ToString());
+
+        static void BuildActions()
+        {
+            var toggle =
+                MyAPIGateway.TerminalControls.CreateAction<IMyFunctionalBlock>(nameof(EasyFarming) + "_ToggleAction");
+            toggle.Name = new StringBuilder(MyTexts.Get(MyStringId.GetOrCompute("BlockAction_Toggle")) + " " +
+                                            MyTexts.Get(
+                                                MyStringId.GetOrCompute("RadialMenuGroupTitle_Automation")) + " " +
+                                            MyTexts.Get(MyStringId.GetOrCompute("SwitchText_On")) + "/" +
+                                            MyTexts.Get(MyStringId.GetOrCompute("SwitchText_Off")));
+            toggle.ValidForGroups = true;
+            toggle.Icon = @"Textures\GUI\Icons\Actions\Toggle.dds";
+            toggle.Action = ToggleAutomation;
+            toggle.Writer = Status;
+            toggle.Enabled = IsKnownPlanterBlock;
+            MyAPIGateway.TerminalControls.AddAction<IMyFunctionalBlock>(toggle);
+
+            var on = MyAPIGateway.TerminalControls.CreateAction<IMyFunctionalBlock>(nameof(EasyFarming) +
+                "_OnAction");
+            on.Name = new StringBuilder(MyTexts.Get(MyStringId.GetOrCompute("BlockAction_Toggle")) + " " +
+                                        MyTexts.Get(MyStringId.GetOrCompute("RadialMenuGroupTitle_Automation")) +
+                                        " " + MyTexts.Get(MyStringId.GetOrCompute("SwitchText_On")));
+            on.ValidForGroups = true;
+            on.Icon = @"Textures\GUI\Icons\Actions\SwitchOn.dds";
+            on.Action = ToggleAutomationOn;
+            on.Writer = Status;
+            on.Enabled = IsKnownPlanterBlock;
+            MyAPIGateway.TerminalControls.AddAction<IMyFunctionalBlock>(on);
+
+            var off = MyAPIGateway.TerminalControls.CreateAction<IMyFunctionalBlock>(nameof(EasyFarming) +
+                "_OffAction");
+            off.Name = new StringBuilder(MyTexts.Get(MyStringId.GetOrCompute("BlockAction_Toggle")) + " " +
+                                         MyTexts.Get(MyStringId.GetOrCompute("RadialMenuGroupTitle_Automation")) +
+                                         " " + MyTexts.Get(MyStringId.GetOrCompute("SwitchText_Off")));
+            off.ValidForGroups = true;
+            off.Icon = @"Textures\GUI\Icons\Actions\SwitchOff.dds";
+            off.Action = ToggleAutomationOff;
+            off.Writer = Status;
+            off.Enabled = IsKnownPlanterBlock;
+            MyAPIGateway.TerminalControls.AddAction<IMyFunctionalBlock>(off);
+            
+            _actionsInitialized = true;
+        }
+
+        static void Status(IMyTerminalBlock b, StringBuilder sb)
+        {
+            var config = ConfigManager.GetConfigForBlock(b);
+            string status = config == null
+                ? MyTexts.GetString("DetectedEntity_Unknown") // status is Unknown
+                : config.AutomationEnabled
+                    ? MyTexts.GetString("SwitchText_On")
+                    : MyTexts.GetString("SwitchText_Off");
+
+            sb.Append(status);
+        }
+
+        static void ToggleAutomation(IMyTerminalBlock block, bool? state)
+        {
+            var config = ConfigManager.GetConfigForBlock(block);
+
+            if (config == null)
+                return;
+
+            if (state != null && state == config.AutomationEnabled)
+                return;
+
+            config.AutomationEnabled = !config.AutomationEnabled;
+            ConfigManager.Sync(block, config);
+
+        }
+
+        static void ToggleAutomation(IMyTerminalBlock block) => ToggleAutomation(block, null);
+
+        static void ToggleAutomationOn(IMyTerminalBlock block) => ToggleAutomation(block, true);
+
+        static void ToggleAutomationOff(IMyTerminalBlock block) => ToggleAutomation(block, false);
+
         public override void UpdateBeforeSimulation100()
         {
+            if (!_actionsInitialized)
+                BuildActions();
+            
             base.UpdateBeforeSimulation100();
 
-            if(!MyAPIGateway.Session.IsServer)
+            if (!MyAPIGateway.Session.IsServer)
             {
                 MyLog.Default.Log(MyLogSeverity.Error, "Cannot update planter block on Client");
                 return;
             }
-            
+
             if (!Config.AutomationEnabled && Config.SelectedItems.Length != 0)
                 return;
 
@@ -135,7 +221,7 @@ namespace EasyFarming.System
                 builder.AppendError($"{MyTexts.GetString("BlockPropertyProperties_CauseOfDeath_LowWater")}");
                 hasIssues = true;
             }
-            
+
             if (!Config.SelectedItems.Any())
             {
                 builder.AppendWarning(
@@ -150,7 +236,8 @@ namespace EasyFarming.System
             if (AirVent == null || Assembler == null)
             {
                 builder.AppendWarning(
-                    $"{MyTexts.GetString("MessageBox_Caption_NotFullyGrownWarning")} - {MyTexts.GetString("MissingBlock")}", "");
+                    $"{MyTexts.GetString("MessageBox_Caption_NotFullyGrownWarning")} - {MyTexts.GetString("MissingBlock")}",
+                    "");
 
                 if (Assembler == null)
                     builder.AppendLine($"   {MyTexts.GetString("DisplayName_Block_FoodProcessor")}");
@@ -202,7 +289,7 @@ namespace EasyFarming.System
                 hasIssues = true;
             }
 
-            if (hasIssues) 
+            if (hasIssues)
                 return;
 
             var functional = MyTexts.GetString("Functional").ToLower();
