@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using EasyFarming.Helpers;
 using EasyFarming.System.Config;
+using Sandbox.Game;
 using Sandbox.ModAPI;
 using Sandbox.ModAPI.Interfaces.Terminal;
 using VRage.Game;
@@ -45,7 +46,7 @@ namespace EasyFarming.System.TerminalControls.Combobox
             var settings = ConfigManager.GetConfigForBlock(ReferenceBlock);
 
             if (settings == null)
-                return -1;
+                return 0;
 
             string group;
             long? block;
@@ -59,19 +60,22 @@ namespace EasyFarming.System.TerminalControls.Combobox
                 if (ComboBoxItemHelper.TryGetGroupId($"*{group}*", out id))
                     return id;
                 
-                return -1;
+                return 0;
             }
 
             if (block == null)
-                return -1;
+                return 0;
 
             SelectedCache = block.Value;
             return (long)SelectedCache;
 
         }
 
-        protected virtual void Content(List<MyTerminalControlComboBoxItem> blockList)
+        protected override void Content(List<MyTerminalControlComboBoxItem> items)
         {
+            base.Content(items);
+            var blockList = new List<MyTerminalControlComboBoxItem>();
+
             if (ReferenceBlock == null)
                 return;
 
@@ -113,13 +117,13 @@ namespace EasyFarming.System.TerminalControls.Combobox
                             $"@{a.DisplayNameText}@",
                             a.EntityId)));
             }
-
-            blockList.Sort((a, b) => string.Compare(a.Value.String, b.Value.String, StringComparison.Ordinal));
+            
+            items.AddRange(blockList);
         }
 
         bool IsValidBlock(IMyTerminalBlock block, IMyTerminalBlock referenceBlock, string filter = "")
         {
-            if(block == null || !block.HasInventory)
+            if(block == null || !block.HasInventory || !MyVisualScriptLogicProvider.IsConveyorConnected(block.Name, referenceBlock.Name))
                 return false; // Check if is a Terminal block
             
             if(block.EntityId.Equals(SelectedCache))
@@ -201,10 +205,14 @@ namespace EasyFarming.System.TerminalControls.Combobox
                 SelectedCache = group;
                 SetConfig(config, null, group.Substring(1, group.Length - 2));
             }
-            else
+            else if (l != -1)
             {
                 SelectedCache = l;
-                SetConfig(config, l, null);
+                SetConfig(config,  l, null);
+            }
+            else
+            {
+                SetConfig(config, null, null);
             }
 
             ConfigManager.Sync(b, config);

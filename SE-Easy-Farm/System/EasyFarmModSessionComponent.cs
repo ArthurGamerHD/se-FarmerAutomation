@@ -22,7 +22,7 @@ namespace EasyFarming.System
     // ReSharper disable once ClassNeverInstantiated.Global
     public class EasyFarmModSessionComponent : MySessionComponentBase
     {
-        public static List<TerminalControlsWrapper> Controls = new List<TerminalControlsWrapper>();
+        static readonly List<TerminalControlsWrapper> Controls = new List<TerminalControlsWrapper>();
 
         protected override void UnloadData()
         {
@@ -33,8 +33,10 @@ namespace EasyFarming.System
             Controls.Clear();
             
             ListBoxItemHelper.PerTypeCache.Clear();
-
             ConfigManager.Close();
+
+            ComboboxWrapper.ReferenceBlock = null;
+            ComboboxWrapper.None = null;
         }
 
         public override void BeforeStart()

@@ -4,6 +4,7 @@ using System.Linq;
 using EasyFarming.Helpers;
 using EasyFarming.System.Config;
 using Sandbox.Definitions;
+using Sandbox.Game;
 using Sandbox.ModAPI;
 using Sandbox.ModAPI.Interfaces.Terminal;
 using SpaceEngineers.Game.ModAPI;
@@ -39,23 +40,21 @@ namespace EasyFarming.System.TerminalControls.Combobox
             var settings = ConfigManager.GetConfigForBlock(ReferenceBlock);
 
             if (settings == null)
-                return -1;
+                return 0;
 
-            long? block;
+            var block = settings.Assembler;
+            if (block == null) return 0;
+            SelectedCache = block.Value;
+            return block.Value;
 
-            block = settings.Assembler;
-            if (block != null)
-            {
-                SelectedCache = block.Value;
-                return block.Value;
-            }
-               
 
-            return -1;
         }
 
-        protected void Content(List<MyTerminalControlComboBoxItem> blockList)
+        protected override void Content(List<MyTerminalControlComboBoxItem> items)
         {
+            base.Content(items);
+            var blockList = new List<MyTerminalControlComboBoxItem>();
+            
             if (ReferenceBlock == null)
                 return;
 
@@ -89,11 +88,15 @@ namespace EasyFarming.System.TerminalControls.Combobox
                         $"@{a.DisplayNameText}@",
                         a.EntityId)));
             }
+            
+            blockList.Sort((a, b) => string.Compare(a.Value.String, b.Value.String, StringComparison.Ordinal));
+            items.AddRange(blockList);
         }
 
         bool IsValidBlock(IMyAssembler block, IMyTerminalBlock referenceBlock, string filter = "")
         {
             return block != null &&
+                   MyVisualScriptLogicProvider.IsConveyorConnected(block.Name, referenceBlock.Name) &&
                    (block.GetUserRelationToOwner(referenceBlock.OwnerId) <=
                     MyRelationsBetweenPlayerAndBlock.FactionShare &&
                     CanUseBlueprintFast(block) &&
