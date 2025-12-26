@@ -86,7 +86,7 @@ namespace EasyFarming.System
         {
             try
             {
-                if(!packetRaw.IsFromServer)
+                if(!packetRaw.IsFromServer && !MyAPIGateway.Session.IsServer)
                     return; // some script kiddo tried to mess up with the settings
                 
                 switch (packetRaw.Code)

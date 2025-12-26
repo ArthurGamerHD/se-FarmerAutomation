@@ -46,15 +46,13 @@ namespace EasyFarming.System.TerminalControls.Combobox
             if (block == null) return 0;
             SelectedCache = block.Value;
             return block.Value;
-
-
         }
 
         protected override void Content(List<MyTerminalControlComboBoxItem> items)
         {
             base.Content(items);
             var blockList = new List<MyTerminalControlComboBoxItem>();
-            
+
             if (ReferenceBlock == null)
                 return;
 
@@ -88,23 +86,34 @@ namespace EasyFarming.System.TerminalControls.Combobox
                         $"@{a.DisplayNameText}@",
                         a.EntityId)));
             }
-            
+
             blockList.Sort((a, b) => string.Compare(a.Value.String, b.Value.String, StringComparison.Ordinal));
             items.AddRange(blockList);
         }
 
         bool IsValidBlock(IMyAssembler block, IMyTerminalBlock referenceBlock, string filter = "")
         {
-            return block != null &&
-                   MyVisualScriptLogicProvider.IsConveyorConnected(block.Name, referenceBlock.Name) &&
-                   (block.GetUserRelationToOwner(referenceBlock.OwnerId) <=
-                    MyRelationsBetweenPlayerAndBlock.FactionShare &&
-                    CanUseBlueprintFast(block) &&
-                    (string.IsNullOrEmpty(filter) || block.CustomName == null ||
-                     filter.Split(' ').All(a =>
-                         block.CustomName.Split(' ')
-                             .Any(b => b.StartsWith(a, StringComparison.InvariantCultureIgnoreCase))))
-                    || block.EntityId.Equals(SelectedCache));
+            try
+            {
+                return block != null &&
+                       CanUseBlueprintFast(block) &&
+                       MyVisualScriptLogicProvider.IsConveyorConnected(block.Name, referenceBlock.Name) &&
+                       (block.GetUserRelationToOwner(referenceBlock.OwnerId) <=
+                        MyRelationsBetweenPlayerAndBlock.FactionShare &&
+                        (string.IsNullOrEmpty(filter) || block.CustomName == null ||
+                         filter.Split(' ').All(a =>
+                             block.CustomName.Split(' ')
+                                 .Any(b => b.StartsWith(a, StringComparison.InvariantCultureIgnoreCase))))
+                        || block.EntityId.Equals(SelectedCache));
+            }
+            catch (Exception e)
+            {
+                MyAPIGateway.Utilities.ShowNotification($"\"{nameof(EasyFarming)}\" mod caused a exception when attempted to check block {block?.CustomName} from {referenceBlock?.CustomName}," +
+                                                        $"\nCrash was prevent" +
+                                                        $"\nPlease send the game log (%appdata%\\SpaceEngineers\\SpaceEngineers_*_*.log) to Mod's author");
+                MyLog.Default.Log(MyLogSeverity.Error, $"{nameof(EasyFarming)}: Crash prevented when attempted to check block {block?.CustomName} from {referenceBlock?.CustomName}: ", e.ToString());
+                return false;
+            }
         }
 
         static bool CanUseBlueprintFast(IMyAssembler block)
@@ -128,9 +137,6 @@ namespace EasyFarming.System.TerminalControls.Combobox
 
             config.Assembler = l;
             SelectedCache = l;
-
-            ConfigManager.Sync(b, config);
-            ConfigManager.GetInstanceForBlock(b).UpdateAssembler();
         }
     }
 }

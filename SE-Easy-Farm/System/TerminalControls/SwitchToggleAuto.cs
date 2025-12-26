@@ -9,8 +9,6 @@ namespace EasyFarming.System.TerminalControls
     public class SwitchToggleAuto : TerminalControlsWrapper
     {
         public override IMyTerminalControl TerminalControl { get; }
-
-        public event Action OnToggled;
         
         public SwitchToggleAuto()
         {
@@ -32,9 +30,6 @@ namespace EasyFarming.System.TerminalControls
                 return;
 
             config.AutomationEnabled = value;
-            ConfigManager.Sync(block);
-            ConfigManager.GetInstanceForBlock(block).UpdateAutomation();
-            OnToggled?.Invoke();
         }
 
         bool Getter(IMyTerminalBlock myTerminalBlock)

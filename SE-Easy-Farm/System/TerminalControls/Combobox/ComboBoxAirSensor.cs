@@ -86,9 +86,6 @@ namespace EasyFarming.System.TerminalControls.Combobox
 
             config.AirSensor = l;
             SelectedCache = l;
-
-            ConfigManager.Sync(b, config);
-            ConfigManager.GetInstanceForBlock(b).UpdateAirVent();
         }
     }
 }

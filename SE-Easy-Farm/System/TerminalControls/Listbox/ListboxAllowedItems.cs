@@ -52,9 +52,6 @@ namespace EasyFarming.System.TerminalControls.Listbox
             var items = selection.Where(a => a.UserData is MyDefinitionId)
                 .Select(a => (MyDefinitionId)a.UserData).ToArray();
             settings.SelectedItems = items;
-            
-            ConfigManager.Sync(b, settings);
-            ConfigManager.GetInstanceForBlock(b).UpdateAutomation();
         } 
         
         public bool WhiteList(object a)

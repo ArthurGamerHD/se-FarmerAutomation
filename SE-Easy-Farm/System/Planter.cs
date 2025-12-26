@@ -15,6 +15,7 @@ using VRage.Game.ModAPI.Ingame;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
 using VRage.Utils;
+using IMyEntity = VRage.ModAPI.IMyEntity;
 using IMyInventory = VRage.Game.ModAPI.IMyInventory;
 
 namespace EasyFarming.System
@@ -64,30 +65,32 @@ namespace EasyFarming.System
 
             ConfigManager.LoadSettings(Block, ref Config);
 
+            Config.OnChanged += ConfigChanged;
+            Config.OnSync += ConfigSync;
+            Block.OnClose += BlockOnClose;
+            
+            if (SeedsBlueprints == null)
+            {
+                SeedsBlueprints = new Dictionary<MyDefinitionId, MyBlueprintDefinitionBase>();
+
+                var seedBlueprints = MyDefinitionManager.Static.GetBlueprintDefinitions()
+                    .Where(a => a.Results
+                        .Any(b => b.Id.TypeId.ToString().EndsWith("_SeedItem")));
+
+                foreach (var blueprintDefinition in seedBlueprints)
+                {
+                    var seed = blueprintDefinition.Results.First(b => b.Id.TypeId.ToString().EndsWith("_SeedItem"));
+                    if (SeedsBlueprints.ContainsKey(seed.Id))
+                        MyLog.Default.Log(MyLogSeverity.Error,
+                            $"{nameof(EasyFarming)}: Blueprint for item \'{seed.Id}\' already exists! Multiples blueprints for the same item is NOT supported, Last one will be used");
+
+                    SeedsBlueprints[seed.Id] = blueprintDefinition;
+                }
+            }
+            
             if (MyAPIGateway.Session.IsServer)
             {
                 NeedsUpdate = MyEntityUpdateEnum.EACH_100TH_FRAME;
-
-                if (SeedsBlueprints == null)
-                {
-                    SeedsBlueprints = new Dictionary<MyDefinitionId, MyBlueprintDefinitionBase>();
-
-                    var seedBlueprints = MyDefinitionManager.Static.GetBlueprintDefinitions()
-                        .Where(a => a.Results
-                            .Any(b => b.Id.TypeId.ToString().EndsWith("_SeedItem")));
-
-                    foreach (var blueprintDefinition in seedBlueprints)
-                    {
-                        var seed = blueprintDefinition.Results.First(b => b.Id.TypeId.ToString().EndsWith("_SeedItem"));
-                        if (SeedsBlueprints.ContainsKey(seed.Id))
-                            MyLog.Default.Log(MyLogSeverity.Error,
-                                $"{nameof(EasyFarming)}: Blueprint for item \'{seed.Id}\' already exists! Multiples blueprints for the same item is NOT supported, Last one will be used");
-
-                        SeedsBlueprints[seed.Id] = blueprintDefinition;
-                    }
-                }
-
-
                 MyLog.Default.Log(MyLogSeverity.Debug, $"{nameof(EasyFarming)}: Found planter block");
             }
             else
@@ -99,6 +102,44 @@ namespace EasyFarming.System
             Block.AppendingCustomInfo += OnBlockOnAppendingCustomInfo;
         }
 
+        void BlockOnClose(IMyEntity obj)
+        {
+            Config.OnChanged -= ConfigChanged;
+            Config.OnSync -= ConfigSync;
+            Block.OnClose -= BlockOnClose;
+            Block.AppendingCustomInfo -= OnBlockOnAppendingCustomInfo;
+        }
+        
+        void ConfigSync(ObservableConfig obj)
+        {
+            UpdateAssembler();
+            UpdateAirVent();
+            UpdateAutomation();
+        }
+        
+        void ConfigChanged(ObservableConfig observable, string name)
+        {
+            var config = observable as FarmPlotConfig;
+
+            if(config == null)
+                return;
+            
+            ConfigManager.Sync(Block, config);
+
+            switch (name)
+            {
+                case nameof(FarmPlotConfig.AirSensor):
+                    UpdateAirVent();
+                    break;
+
+                case nameof(FarmPlotConfig.Assembler):
+                    UpdateAssembler();
+                    break;
+            }
+
+            UpdateAutomation();
+        }
+
         static bool IsKnownPlanterBlock(IMyTerminalBlock b) => KnownPlanterBlocks.Contains(b.BlockDefinition.ToString());
 
         static void BuildActions()
@@ -106,8 +147,7 @@ namespace EasyFarming.System
             var toggle =
                 MyAPIGateway.TerminalControls.CreateAction<IMyFunctionalBlock>(nameof(EasyFarming) + "_ToggleAction");
             toggle.Name = new StringBuilder(MyTexts.Get(MyStringId.GetOrCompute("BlockAction_Toggle")) + " " +
-                                            MyTexts.Get(
-                                                MyStringId.GetOrCompute("RadialMenuGroupTitle_Automation")) + " " +
+                                            MyTexts.Get(MyStringId.GetOrCompute("RadialMenuGroupTitle_Automation")) + " " +
                                             MyTexts.Get(MyStringId.GetOrCompute("SwitchText_On")) + "/" +
                                             MyTexts.Get(MyStringId.GetOrCompute("SwitchText_Off")));
             toggle.ValidForGroups = true;
@@ -459,9 +499,6 @@ namespace EasyFarming.System
                 AirVent = entity;
         }
 
-        public void UpdateAutomation()
-        {
-            Block.RefreshCustomInfo();
-        }
+        public void UpdateAutomation() => Block.RefreshCustomInfo();
     }
 }
