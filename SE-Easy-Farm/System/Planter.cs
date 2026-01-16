@@ -68,7 +68,7 @@ namespace EasyFarming.System
             Config.OnChanged += ConfigChanged;
             Config.OnSync += ConfigSync;
             Block.OnClose += BlockOnClose;
-            
+
             if (SeedsBlueprints == null)
             {
                 SeedsBlueprints = new Dictionary<MyDefinitionId, MyBlueprintDefinitionBase>();
@@ -87,7 +87,7 @@ namespace EasyFarming.System
                     SeedsBlueprints[seed.Id] = blueprintDefinition;
                 }
             }
-            
+
             if (MyAPIGateway.Session.IsServer)
             {
                 NeedsUpdate = MyEntityUpdateEnum.EACH_100TH_FRAME;
@@ -109,21 +109,21 @@ namespace EasyFarming.System
             Block.OnClose -= BlockOnClose;
             Block.AppendingCustomInfo -= OnBlockOnAppendingCustomInfo;
         }
-        
+
         void ConfigSync(ObservableConfig obj)
         {
             UpdateAssembler();
             UpdateAirVent();
             UpdateAutomation();
         }
-        
+
         void ConfigChanged(ObservableConfig observable, string name)
         {
             var config = observable as FarmPlotConfig;
 
-            if(config == null)
+            if (config == null)
                 return;
-            
+
             ConfigManager.Sync(Block, config);
 
             switch (name)
@@ -140,14 +140,16 @@ namespace EasyFarming.System
             UpdateAutomation();
         }
 
-        static bool IsKnownPlanterBlock(IMyTerminalBlock b) => KnownPlanterBlocks.Contains(b.BlockDefinition.ToString());
+        static bool IsKnownPlanterBlock(IMyTerminalBlock b) =>
+            KnownPlanterBlocks.Contains(b.BlockDefinition.ToString());
 
         static void BuildActions()
         {
             var toggle =
                 MyAPIGateway.TerminalControls.CreateAction<IMyFunctionalBlock>(nameof(EasyFarming) + "_ToggleAction");
             toggle.Name = new StringBuilder(MyTexts.Get(MyStringId.GetOrCompute("BlockAction_Toggle")) + " " +
-                                            MyTexts.Get(MyStringId.GetOrCompute("RadialMenuGroupTitle_Automation")) + " " +
+                                            MyTexts.Get(MyStringId.GetOrCompute("RadialMenuGroupTitle_Automation")) +
+                                            " " +
                                             MyTexts.Get(MyStringId.GetOrCompute("SwitchText_On")) + "/" +
                                             MyTexts.Get(MyStringId.GetOrCompute("SwitchText_Off")));
             toggle.ValidForGroups = true;
@@ -180,7 +182,7 @@ namespace EasyFarming.System
             off.Writer = Status;
             off.Enabled = IsKnownPlanterBlock;
             MyAPIGateway.TerminalControls.AddAction<IMyFunctionalBlock>(off);
-            
+
             _actionsInitialized = true;
         }
 
@@ -208,7 +210,6 @@ namespace EasyFarming.System
 
             config.AutomationEnabled = !config.AutomationEnabled;
             ConfigManager.Sync(block, config);
-
         }
 
         static void ToggleAutomation(IMyTerminalBlock block) => ToggleAutomation(block, null);
@@ -221,7 +222,7 @@ namespace EasyFarming.System
         {
             if (!_actionsInitialized)
                 BuildActions();
-            
+
             base.UpdateBeforeSimulation100();
 
             if (!MyAPIGateway.Session.IsServer)
@@ -368,7 +369,7 @@ namespace EasyFarming.System
             }
             else if (Config.OutputBlock != null)
             {
-                var block = MyAPIGateway.Entities.GetEntityById(Config.InputBlock) as IMyTerminalBlock;
+                var block = MyAPIGateway.Entities.GetEntityById(Config.OutputBlock) as IMyTerminalBlock;
                 if (block != null && block.HasInventory)
                     TryHarvestToBlock(block);
             }
@@ -424,29 +425,33 @@ namespace EasyFarming.System
         public bool TryPlantFromBlock(IMyTerminalBlock block)
         {
             var reference = block.GetInventory();
-            var seed = Config.SelectedItems.FirstOrDefault();
-
-            var production = block as IMyProductionBlock;
-
-            for (int i = 0; i < block.InventoryCount; i++)
+            foreach (var seed in Config.SelectedItems)
             {
-                var inventory = block.GetInventory(i);
+                var production = block as IMyProductionBlock;
 
-                if (production?.InputInventory == inventory) // skip first slot for assembler/refinery/food-processor
-                    continue;
+                for (int i = 0; i < block.InventoryCount; i++)
+                {
+                    var inventory = block.GetInventory(i);
 
-                if (reference == null || inventory == null)
-                    continue;
+                    if (production?.InputInventory ==
+                        inventory) // skip first slot for assembler/refinery/food-processor
+                        continue;
 
-                var canTransfer = inventory.CanTransferItemTo(reference, seed);
+                    if (reference == null || inventory == null)
+                        continue;
 
-                if (!canTransfer)
-                    continue;
+                    var canTransfer = inventory.CanTransferItemTo(reference, seed);
 
-                TryPlantFromInventory(inventory);
-                return _planterComponent.IsPlantPlanted;
+                    if (!canTransfer)
+                        continue;
+
+                    TryPlantFromInventory(inventory);
+                    if(_planterComponent.IsPlantPlanted)
+                        return true;
+                }
+
             }
-
+            
             return false;
         }
 
@@ -460,9 +465,9 @@ namespace EasyFarming.System
 
                 if (inventoryItem.Amount < _planterComponent.AmountOfSeedsRequired)
                     continue;
-
-                inventoryItem.Amount -= _planterComponent.AmountOfSeedsRequired;
+                
                 var def = inventoryItem.GetDefinitionId();
+                block.RemoveItemAmount(inventoryItem, _planterComponent.AmountOfSeedsRequired);
                 _planterComponent.PlantSeed(def);
                 TryProduceMoreSeeds(def);
             }
