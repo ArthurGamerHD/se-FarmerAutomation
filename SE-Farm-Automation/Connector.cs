@@ -22,9 +22,9 @@ namespace FarmerAutomation
     [MyEntityComponentDescriptor(typeof(MyObjectBuilder_ShipConnector), false)]
     public class ConnectorLogicComponent : MyGameLogicComponent
     {
-        private const string ID_PREFIX = nameof(FarmerAutomation) + "_"; 
+        private const string ID_PREFIX = nameof(FarmerAutomation) + "_";
         static bool _initialized;
-        
+
         public override void Init(MyObjectBuilder_EntityBase objectBuilder)
         {
             NeedsUpdate = MyEntityUpdateEnum.BEFORE_NEXT_FRAME;
@@ -37,9 +37,9 @@ namespace FarmerAutomation
 
         public static void DoOnce()
         {
-            if(_initialized)
+            if (_initialized)
                 return;
-            
+
             BuildTerminalControls();
             BuildActions();
             _initialized = true;
@@ -47,7 +47,9 @@ namespace FarmerAutomation
 
         static void BuildTerminalControls()
         {
-            var button = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyShipConnector>(ID_PREFIX + "DropOnceButton");
+            var button =
+                MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyShipConnector>(ID_PREFIX +
+                    "DropOnceButton");
             button.Title = MyStringId.GetOrCompute("ToolTipTerminalInventory_ThrowOut");
             button.Tooltip = MyStringId.GetOrCompute("ToolTipTerminalInventory_ThrowOut");
             button.SupportsMultipleBlocks = true;
@@ -66,7 +68,11 @@ namespace FarmerAutomation
 
         static bool CanDrop(IMyShipConnector connector)
         {
-            return connector.HasInventory && !connector.GetInventory(0).Empty() && !((connector.Status != MyShipConnectorStatus.Unconnected || !connector.IsFunctional || connector.Closed));
+            return connector.Enabled &&
+                   connector.HasInventory &&
+                   !connector.GetInventory(0).Empty() &&
+                   !(connector.Status != MyShipConnectorStatus.Unconnected || !connector.IsFunctional ||
+                     connector.Closed);
         }
 
         static void BuildActions()
@@ -81,7 +87,7 @@ namespace FarmerAutomation
                 a.Icon = @"Textures\GUI\Icons\Actions\Start.dds";
 
                 a.Action = ThrowOutSingleItem;
-                
+
                 a.Writer = (b, sb) =>
                 {
                     var connector = b as IMyShipConnector;
@@ -93,7 +99,7 @@ namespace FarmerAutomation
                                 ? MyTexts.GetString("EventState_ConnectorConnected") // Is Connected or Ready to Connect
                                 : MyTexts.GetString("ScreenMedicals_RespawnShipReady"); // Is Ready to Drop Items
 
-                    
+
                     sb.Append(status);
                 };
 
@@ -107,50 +113,49 @@ namespace FarmerAutomation
 
         public static void ThrowOutSingleItem(IMyShipConnector connector)
         {
-            if(connector.Status != MyShipConnectorStatus.Unconnected || !connector.IsFunctional || connector.Closed)
+            if (!CanDrop(connector))
                 return;
-            
+
             if (!MyAPIGateway.Utilities.IsDedicated && !MyAPIGateway.Session.IsServer)
             {
                 FarmerAutomationMod.Network.TransmitToServer(new PacketConnectorDropSeed(connector.EntityId), false);
                 return;
             }
-            
+
             var inventory = connector.GetInventory(0);
             var items = new List<MyInventoryItem>();
             inventory.GetItems(items);
             if (!items.Any())
                 return;
-            
+
             var id = items.First().ItemId;
             var item = inventory.GetItemByID(id);
             if (item == null)
                 return;
-            
+
             var defId = item.Content.GetId();
             MyPhysicalItemDefinition def;
             if (!MyDefinitionManager.Static.TryGetPhysicalItemDefinition(defId, out def))
                 return;
-            
+
             MyFixedPoint dropAmount = 1;
             if (item.Amount < dropAmount)
                 dropAmount = item.Amount;
-            
+
             var content = (MyObjectBuilder_PhysicalObject)item.Content;
             var droppedItem = new MyPhysicalInventoryItem(dropAmount, content);
-            
+
             inventory.RemoveItemsOfType(dropAmount, content);
             MatrixD wm = connector.WorldMatrix;
-            
+
             float halfSize = def.Size.Max() * 0.5f;
-            Vector3D spawnPos = connector.GetPosition() + wm.Forward * (connector.CubeGrid.GridSize * 0.5 + halfSize + 0.1);
+            Vector3D spawnPos = connector.GetPosition() +
+                                wm.Forward * (connector.CubeGrid.GridSize * 0.5 + halfSize + 0.1);
             Vector3D forward = wm.Forward;
             Vector3D up = wm.Up;
 
-            MyFloatingObjects.Spawn(droppedItem, spawnPos, forward, up, connector.CubeGrid?.Physics, entity =>
-            {
-                entity.Physics.LinearVelocity += (Vector3)(wm.Forward * 2f);
-            });
+            MyFloatingObjects.Spawn(droppedItem, spawnPos, forward, up, connector.CubeGrid?.Physics,
+                entity => { entity.Physics.LinearVelocity += (Vector3)(wm.Forward * 2f); });
         }
     }
 }
