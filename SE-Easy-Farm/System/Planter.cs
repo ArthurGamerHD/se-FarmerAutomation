@@ -37,6 +37,16 @@ namespace EasyFarming.System
         IMyResourceStorageComponent _storageComponent;
         static bool _actionsInitialized;
 
+        // hacky? yes, but Game's O2 Generator does the same, so why not?
+        public static MyDefinitionId AllDefinition { get; } = MyDefinitionManager.Static.GetPhysicalItemDefinition(MyDefinitionId.Parse("Ore/Stone")).Id;
+
+        public IEnumerable<MyDefinitionId> GetSeeds()
+        {
+            return Config.SelectedItems.Any(a => a.Equals(AllDefinition)) ? 
+                MyDefinitionManager.Static.GetPhysicalItemDefinitions().Where(a => a.Id.TypeId.ToString().Contains("SeedItem"))
+                    .Select(a => a.Id) : Config.SelectedItems;
+        }
+
         public override void Init(MyObjectBuilder_EntityBase objectBuilder)
         {
             var block = Entity as IMyFunctionalBlock;
@@ -425,7 +435,7 @@ namespace EasyFarming.System
         public bool TryPlantFromBlock(IMyTerminalBlock block)
         {
             var reference = block.GetInventory();
-            foreach (var seed in Config.SelectedItems)
+            foreach (var seed in GetSeeds())
             {
                 var production = block as IMyProductionBlock;
 
@@ -457,7 +467,7 @@ namespace EasyFarming.System
 
         public void TryPlantFromInventory(IMyInventory block)
         {
-            foreach (var item in Config.SelectedItems)
+            foreach (var item in GetSeeds())
             {
                 var inventoryItem = block.FindItem(item);
                 if (inventoryItem == null)
@@ -486,8 +496,7 @@ namespace EasyFarming.System
                 return;
 
             var entity = MyAPIGateway.Entities.GetEntityById(Config.Assembler) as IMyAssembler;
-            if (entity != null && entity.IsInSameLogicalGroupAs(Block) &&
-                entity.GetUserRelationToOwner(Block.OwnerId) <= MyRelationsBetweenPlayerAndBlock.FactionShare)
+            if (entity != null && entity.IsInSameLogicalGroupAs(Block))
                 Assembler = entity;
         }
 
@@ -499,8 +508,7 @@ namespace EasyFarming.System
                 return;
 
             var entity = MyAPIGateway.Entities.GetEntityById(Config.AirSensor) as IMyAirVent;
-            if (entity != null && entity.CubeGrid == Block.CubeGrid &&
-                entity.GetUserRelationToOwner(Block.OwnerId) <= MyRelationsBetweenPlayerAndBlock.FactionShare)
+            if (entity != null && entity.CubeGrid == Block.CubeGrid)
                 AirVent = entity;
         }
 

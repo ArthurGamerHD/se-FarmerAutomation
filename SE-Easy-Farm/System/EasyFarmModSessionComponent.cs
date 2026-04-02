@@ -11,6 +11,7 @@ using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using Sandbox.ModAPI.Interfaces.Terminal;
 using VRage;
+using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
@@ -87,8 +88,11 @@ namespace EasyFarming.System
             try
             {
                 if(!packetRaw.IsFromServer && !MyAPIGateway.Session.IsServer)
+                {
+                    MyLog.Default.Log(MyLogSeverity.Warning, "Received block update but message is not from server (sender:{0})", packetRaw.SenderId);
                     return; // some script kiddo tried to mess up with the settings
-                
+                }
+
                 switch (packetRaw.Code)
                 {
                     case PackageCode.SyncConfig:
@@ -97,7 +101,29 @@ namespace EasyFarming.System
                         var block = MyEntities.GetEntityById(packet.BlockId) as IMyFunctionalBlock;
 
                         if (block == null)
-                            return;
+                        {
+                            MyLog.Default.Log(MyLogSeverity.Warning, "Received block update for farm plot {0} but block does not exists", packet.BlockId);
+                            return; // Non-Existing Block
+                        }
+                            
+                        
+                        long identity = MyAPIGateway.Players.TryGetIdentityId(packetRaw.SenderId);
+                        if(identity == 0 )
+                        {
+                            MyLog.Default.Log(MyLogSeverity.Warning, "Received block update for farm plot {0} from player {1}, but player does not exists", packet.BlockId, identity);
+                            return; // Ghost Player
+                        }
+                        
+
+                        var relationship = block.GetUserRelationToOwner(identity);
+                        if (!(relationship == MyRelationsBetweenPlayerAndBlock.FactionShare ||
+                              relationship == MyRelationsBetweenPlayerAndBlock.Owner ||
+                              relationship == MyRelationsBetweenPlayerAndBlock.NoOwnership))
+                        {
+                            MyLog.Default.Log(MyLogSeverity.Warning, "Received block update for farm plot {0} from player {1}, but player does not have permission ({2})", packet.BlockId, identity, relationship);
+                            return; // Permission Denied
+                        }
+    
 
                         var settings = ConfigManager.GetConfigForBlock(block);
 
